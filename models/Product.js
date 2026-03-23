@@ -13,6 +13,7 @@ const productSchema = new mongoose.Schema(
     expiryDate: { type: String, default: null },
     currency: { type: String, enum: ['USD', 'LRD', null], default: null },
     shopId: { type: String, default: null },
+    ownerAdminId: { type: String, default: null },
     createdAt: { type: String, required: true },
   },
   { _id: false, versionKey: false },

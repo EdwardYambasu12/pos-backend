@@ -125,6 +125,18 @@ router.post('/upsert', requireApiKey, async (req, res) => {
     cleaned.username = cleaned.username.toLowerCase().trim();
   }
 
+  if (collection === 'products' && !cleaned.ownerAdminId && cleaned.shopId) {
+    try {
+      const shop = await Shop.findById(String(cleaned.shopId)).select('ownerAdminId createdBy').lean();
+      const inferredOwner = shop?.ownerAdminId || shop?.createdBy;
+      if (inferredOwner) {
+        cleaned.ownerAdminId = String(inferredOwner);
+      }
+    } catch {
+      // Keep original payload if ownership inference fails.
+    }
+  }
+
   try {
     await Model.findByIdAndUpdate(String(id), { $set: cleaned }, { upsert: true, new: true });
     return res.json({ ok: true });
@@ -240,7 +252,7 @@ router.get('/export-state', requireApiKey, async (req, res) => {
       const enrichedShops = ownerShops.map((shop) => {
         const shopId = String(shop._id);
         const shopUsers = allUsers.filter((u) => String(u.shopId) === shopId);
-        const shopProducts = allProducts.filter((p) => String(p.shopId) === shopId);
+        const shopProducts = allProducts.filter((p) => p.shopId && String(p.shopId) === shopId);
 
         return {
           ...normalize(shop),
@@ -254,6 +266,10 @@ router.get('/export-state', requireApiKey, async (req, res) => {
       const additionalUsers = allUsers.filter(
         (u) => u.role !== 'admin' && u.shopId && shopIds.has(String(u.shopId)),
       );
+      const tenantProducts = allProducts.filter((product) => {
+        if (product.ownerAdminId) return String(product.ownerAdminId) === adminId;
+        return product.shopId && shopIds.has(String(product.shopId));
+      });
       const tenantUsers = [admin, ...additionalUsers];
       const tenantUserIds = new Set(tenantUsers.map((u) => String(u._id)));
       const tenantSales = allSales.filter((sale) => {
@@ -278,6 +294,7 @@ router.get('/export-state', requireApiKey, async (req, res) => {
         owner: normalize(admin),
         additionalUsers: additionalUsers.map(normalize),
         shops: enrichedShops,
+        products: tenantProducts.map(normalize),
         sales: tenantSales.map(normalize),
         expenses: tenantExpenses.map(normalize),
         auditLogs: tenantAuditLogs.map(normalize),
@@ -318,7 +335,7 @@ router.get('/export-tenants', requireApiKey, async (req, res) => {
         return {
           ...normalize(shop),
           users: allUsers.filter((u) => String(u.shopId) === shopId).map(normalize),
-          products: allProducts.filter((p) => String(p.shopId) === shopId).map(normalize),
+          products: allProducts.filter((p) => p.shopId && String(p.shopId) === shopId).map(normalize),
         };
       });
 
@@ -326,6 +343,10 @@ router.get('/export-tenants', requireApiKey, async (req, res) => {
       const additionalUsers = allUsers.filter(
         (u) => u.role !== 'admin' && u.shopId && shopIds.has(String(u.shopId)),
       );
+      const tenantProducts = allProducts.filter((product) => {
+        if (product.ownerAdminId) return String(product.ownerAdminId) === adminId;
+        return product.shopId && shopIds.has(String(product.shopId));
+      });
       const tenantUsers = [admin, ...additionalUsers];
       const tenantUserIds = new Set(tenantUsers.map((u) => String(u._id)));
       const tenantSales = allSales.filter((sale) => {
@@ -350,6 +371,7 @@ router.get('/export-tenants', requireApiKey, async (req, res) => {
         owner: normalize(admin),
         additionalUsers: additionalUsers.map(normalize),
         shops: enrichedShops,
+        products: tenantProducts.map(normalize),
         sales: tenantSales.map(normalize),
         expenses: tenantExpenses.map(normalize),
         auditLogs: tenantAuditLogs.map(normalize),

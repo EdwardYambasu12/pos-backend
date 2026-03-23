@@ -35,6 +35,46 @@ app.use(
   }),
 );
 
+app.get('/ping', (req, res) => {
+  res.json({
+    status: 'alive',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    message: 'Server is awake'
+  });
+});
+
+const KEEP_ALIVE_URL = 'https://pos-backend-1-fa4t.onrender.com/ping';
+const KEEP_ALIVE_INTERVAL = 60 * 1000; // 1 minute
+
+let keepAliveCount = 0;
+let lastKeepAliveSuccess = null;
+
+const keepAlive = () => {
+  const startTime = Date.now();
+  
+  https.get(KEEP_ALIVE_URL, (res) => {
+    const responseTime = Date.now() - startTime;
+    keepAliveCount++;
+    lastKeepAliveSuccess = new Date();
+    
+    if (res.statusCode === 200) {
+      console.log(`Keep-alive #${keepAliveCount} | Status: ${res.statusCode} | Response: ${responseTime}ms`);
+    } else {
+      console.log(`Keep-alive #${keepAliveCount} | Status: ${res.statusCode}`);
+    }
+  }).on('error', (err) => {
+    console.error(`Keep-alive #${keepAliveCount} failed:`, err.message);
+  });
+};
+
+setTimeout(() => {
+  console.log('Starting keep-alive system...');
+  keepAlive();
+  setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
+}, 30000);
+
+
 // General rate limit – tighten for auth routes specifically (see auth.js)
 app.use(
   rateLimit({

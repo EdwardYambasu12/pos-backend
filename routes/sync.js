@@ -231,8 +231,11 @@ router.get('/export-state', requireApiKey, async (req, res) => {
     const tenants = admins.map((admin) => {
       const adminId = String(admin._id);
 
-      // Shops created by this admin
-      const ownerShops = allShops.filter((s) => String(s.createdBy) === adminId);
+      // Shops owned by this admin
+      const ownerShops = allShops.filter((s) => {
+        if (s.ownerAdminId) return String(s.ownerAdminId) === adminId;
+        return String(s.createdBy) === adminId;
+      });
 
       const enrichedShops = ownerShops.map((shop) => {
         const shopId = String(shop._id);
@@ -305,7 +308,10 @@ router.get('/export-tenants', requireApiKey, async (req, res) => {
 
     const tenants = admins.map((admin) => {
       const adminId = String(admin._id);
-      const ownerShops = allShops.filter((s) => String(s.createdBy) === adminId);
+      const ownerShops = allShops.filter((s) => {
+        if (s.ownerAdminId) return String(s.ownerAdminId) === adminId;
+        return String(s.createdBy) === adminId;
+      });
 
       const enrichedShops = ownerShops.map((shop) => {
         const shopId = String(shop._id);

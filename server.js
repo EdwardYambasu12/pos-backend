@@ -20,7 +20,7 @@ const app = express();
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet());
 
-const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'https://swiftpos-iota.vercel.app')
   .split(',')
   .map((o) => o.trim());
 

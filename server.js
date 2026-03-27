@@ -20,20 +20,29 @@ const app = express();
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet());
 
+function normalizeOrigin(value) {
+  return String(value || '').trim().replace(/\/$/, '').toLowerCase();
+}
+
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'https://swiftpos-iota.vercel.app')
   .split(',')
-  .map((o) => o.trim());
+  .map((o) => normalizeOrigin(o))
+  .filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      // Allow requests with no origin (e.g. mobile apps, curl) or whitelisted origins
-      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-      cb(new Error(`CORS: origin ${origin} not allowed`));
-    },
-    credentials: true,
-  }),
-);
+const corsOptions = {
+  origin: (origin, cb) => {
+    const normalizedRequestOrigin = normalizeOrigin(origin);
+
+    // Allow requests with no origin (e.g. mobile apps, curl) or whitelisted origins.
+    if (!origin || allowedOrigins.includes(normalizedRequestOrigin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.get('/ping', (req, res) => {
   res.json({

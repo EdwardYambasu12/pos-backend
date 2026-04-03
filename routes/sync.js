@@ -220,6 +220,34 @@ router.get('/pull-whole-db', requireApiKey, async (req, res) => {
   }
 });
 
+// ─── GET /public-export-core (no API key) ───────────────────────────────────
+/**
+ * Debug endpoint to verify that core data is persisted on the backend.
+ * Returns only users (without pin), products, and shops.
+ */
+router.get('/public-export-core', async (_req, res) => {
+  try {
+    const [users, products, shops] = await Promise.all([
+      User.find().select('-pin').lean(),
+      Product.find().lean(),
+      Shop.find().lean(),
+    ]);
+
+    const normalize = (arr) => arr.map(({ _id, ...rest }) => ({ id: String(_id), ...rest }));
+
+    return res.json({
+      data: {
+        users: normalize(users),
+        products: normalize(products),
+        shops: normalize(shops),
+      },
+    });
+  } catch (err) {
+    console.error('[sync/public-export-core]', err);
+    return res.status(500).json({ error: 'Export failed' });
+  }
+});
+
 // ─── GET /export-state ────────────────────────────────────────────────────────
 /**
  * Returns a tenant-scoped hierarchy per admin user (owner).

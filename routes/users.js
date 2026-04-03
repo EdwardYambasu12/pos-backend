@@ -58,7 +58,7 @@ router.get('/:id', async (req, res) => {
 
 // POST / — create user
 router.post('/', async (req, res) => {
-  const { username, displayName, pin, role, shopId } = req.body;
+  const { username, displayName, pin, role, shopId, createdBy, ownerAdminId } = req.body;
   if (!username || !displayName || !pin) {
     return res.status(400).json({ error: 'username, displayName, and pin are required' });
   }
@@ -74,6 +74,9 @@ router.post('/', async (req, res) => {
     if (existing) return res.status(409).json({ error: 'Username already taken' });
 
     const id = uuidv4();
+    const resolvedOwnerAdminId = (role || 'cashier') === 'admin'
+      ? id
+      : ownerAdminId || createdBy || null;
     const newUser = await User.create({
       _id: id,
       username: username.toLowerCase().trim(),
@@ -82,7 +85,8 @@ router.post('/', async (req, res) => {
       role: role || 'cashier',
       active: true,
       createdAt: new Date().toISOString(),
-      createdBy: null,
+      createdBy: createdBy || null,
+      ownerAdminId: resolvedOwnerAdminId,
       shopId: shopId || null,
     });
 

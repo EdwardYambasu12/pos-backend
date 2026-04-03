@@ -36,7 +36,7 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, address, phone, logoUrl } = req.body;
+  const { name, address, phone, logoUrl, createdBy, ownerAdminId } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   try {
@@ -48,7 +48,8 @@ router.post('/', async (req, res) => {
       phone: phone || null,
       logoUrl: logoUrl || null,
       createdAt: new Date().toISOString(),
-      createdBy: null,
+      createdBy: createdBy || null,
+      ownerAdminId: ownerAdminId || createdBy || null,
     });
     return res.status(201).json(normalize(shop.toObject()));
   } catch (err) {

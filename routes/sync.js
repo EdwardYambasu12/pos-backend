@@ -289,10 +289,15 @@ router.get('/export-state', requireApiKey, async (req, res) => {
         };
       });
 
-      // Additional users who belong to any of this admin's shops (non-admin)
+      // Additional users under this admin tenant (including users without shop assignment)
       const shopIds = new Set(ownerShops.map((s) => String(s._id)));
       const additionalUsers = allUsers.filter(
-        (u) => u.role !== 'admin' && u.shopId && shopIds.has(String(u.shopId)),
+        (u) => {
+          if (u.role === 'admin') return false;
+          if (u.ownerAdminId) return String(u.ownerAdminId) === adminId;
+          if (u.createdBy) return String(u.createdBy) === adminId;
+          return u.shopId && shopIds.has(String(u.shopId));
+        },
       );
       const tenantProducts = allProducts.filter((product) => {
         if (product.ownerAdminId) return String(product.ownerAdminId) === adminId;
@@ -369,7 +374,12 @@ router.get('/export-tenants', requireApiKey, async (req, res) => {
 
       const shopIds = new Set(ownerShops.map((s) => String(s._id)));
       const additionalUsers = allUsers.filter(
-        (u) => u.role !== 'admin' && u.shopId && shopIds.has(String(u.shopId)),
+        (u) => {
+          if (u.role === 'admin') return false;
+          if (u.ownerAdminId) return String(u.ownerAdminId) === adminId;
+          if (u.createdBy) return String(u.createdBy) === adminId;
+          return u.shopId && shopIds.has(String(u.shopId));
+        },
       );
       const tenantProducts = allProducts.filter((product) => {
         if (product.ownerAdminId) return String(product.ownerAdminId) === adminId;

@@ -82,7 +82,7 @@ async function createAuditLog({ action, userId, username, role, targetType, targ
  */
 router.post('/register', authLimiter, async (req, res) => {
   try {
-    const { username, displayName, pin, role, shopId } = req.body;
+    const { username, displayName, pin, role, shopId, createdBy, ownerAdminId } = req.body;
 
     if (!username || !displayName || !pin) {
       return res.status(400).json({ error: 'username, displayName, and pin are required' });
@@ -105,6 +105,9 @@ router.post('/register', authLimiter, async (req, res) => {
     const assignedRole = isFirstUser ? 'admin' : (validRoles.includes(role) ? role : 'cashier');
 
     const id = uuidv4();
+    const resolvedOwnerAdminId = assignedRole === 'admin'
+      ? id
+      : ownerAdminId || createdBy || null;
 
     const newUser = await User.create({
       _id: id,
@@ -114,8 +117,8 @@ router.post('/register', authLimiter, async (req, res) => {
       role: assignedRole,
       active: true,
       createdAt: new Date().toISOString(),
-      createdBy: null,
-      ownerAdminId: assignedRole === 'admin' ? id : null,
+      createdBy: createdBy || null,
+      ownerAdminId: resolvedOwnerAdminId,
       shopId: shopId || null,
     });
 

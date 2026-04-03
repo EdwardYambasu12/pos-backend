@@ -47,7 +47,7 @@ router.get('/:id', async (req, res) => {
 
 // POST /
 router.post('/', async (req, res) => {
-  const { name, costPrice, sellingPrice, quantity, shopId, ...rest } = req.body;
+  const { name, costPrice, sellingPrice, quantity, shopId, ownerAdminId, ...rest } = req.body;
   if (!name || costPrice == null || sellingPrice == null || quantity == null) {
     return res.status(400).json({ error: 'name, costPrice, sellingPrice, and quantity are required' });
   }
@@ -61,6 +61,7 @@ router.post('/', async (req, res) => {
       sellingPrice: Number(sellingPrice),
       quantity: Number(quantity),
       shopId: shopId || null,
+      ownerAdminId: ownerAdminId || null,
       createdAt: new Date().toISOString(),
       ...rest,
     });

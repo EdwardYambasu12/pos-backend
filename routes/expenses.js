@@ -6,6 +6,8 @@
  * POST   /      — create expense                                     [admin, manager]
  * PUT    /:id   — update expense                                     [admin, manager]
  * DELETE /:id   — delete expense                                     [admin]
+ *
+ * Query param: ?userId=<id> enforces shop-level access for cashiers
  */
 
 const router = require('express').Router();
@@ -13,6 +15,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const Expense = require('../models/Expense');
 const AuditLog = require('../models/AuditLog');
+const User = require('../models/User');
 
 
 async function audit(data) {
@@ -23,10 +26,40 @@ async function audit(data) {
 
 function normalize({ _id, ...rest }) { return { id: String(_id), ...rest }; }
 
+/**
+ * Helper: If userId is provided and user is cashier, verify they can access the requested shopId
+ */
+async function checkCashierAccess(userId, requestedShopId) {
+  if (!userId) return { allowed: true };
+
+  const user = await User.findById(String(userId)).lean();
+  if (!user || user.role !== 'cashier') return { allowed: true };
+
+  if (!user.shopId) return { allowed: false };
+
+  if (requestedShopId && String(requestedShopId) !== String(user.shopId)) {
+    return { allowed: false };
+  }
+
+  return { allowed: true, restrictedShopId: String(user.shopId) };
+}
+
 router.get('/', async (req, res) => {
   try {
+    const { userId } = req.query;
+    const access = await checkCashierAccess(userId, req.query.shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only access their assigned shop' });
+    }
+
     const filter = {};
-    if (req.query.shopId) filter.shopId = req.query.shopId;
+    if (req.query.shopId) {
+      filter.shopId = req.query.shopId;
+    } else if (access.restrictedShopId && !req.query.shopId) {
+      // Cashier without explicit shopId: auto-restrict
+      filter.shopId = access.restrictedShopId;
+    }
+
     if (req.query.from || req.query.to) {
       filter.date = {};
       if (req.query.from) filter.date.$gte = req.query.from;
@@ -43,6 +76,13 @@ router.get('/:id', async (req, res) => {
   try {
     const e = await Expense.findById(req.params.id).lean();
     if (!e) return res.status(404).json({ error: 'Expense not found' });
+
+    const { userId } = req.query;
+    const access = await checkCashierAccess(userId, e.shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only access expenses from their assigned shop' });
+    }
+
     return res.json(normalize(e));
   } catch {
     return res.status(500).json({ error: 'Failed to fetch expense' });
@@ -50,25 +90,36 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { title, amount, date, shopId } = req.body;
+  const { title, amount, date, shopId, userId } = req.body;
   if (!title || amount == null) {
     return res.status(400).json({ error: 'title and amount are required' });
   }
 
   try {
+    // Verify cashier access if userId provided
+    const access = await checkCashierAccess(userId, shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only create expenses for their assigned shop' });
+    }
+
+    const finalShopId = shopId || access.restrictedShopId || null;
+
     const id = uuidv4();
     const expense = await Expense.create({
       _id: id,
       title: title.trim(),
       amount: Number(amount),
       date: date || new Date().toISOString(),
-      shopId: shopId || null,
+      shopId: finalShopId,
     });
 
     await audit({
       action: 'expense_added',
-      userId: null, username: null, role: null,
-      targetType: 'expense', targetId: id,
+      userId: userId || null,
+      username: null,
+      role: null,
+      targetType: 'expense',
+      targetId: id,
       details: `Added expense "${title}" of ${amount}`,
     });
 
@@ -89,8 +140,19 @@ router.put('/:id', async (req, res) => {
   }
 
   try {
+    // Get existing expense to check access
+    const existingExpense = await Expense.findById(req.params.id).lean();
+    if (!existingExpense) return res.status(404).json({ error: 'Expense not found' });
+
+    // Check if cashier can update this expense
+    const shopIdToCheck = updates.shopId || existingExpense.shopId;
+    const { userId } = req.body;
+    const access = await checkCashierAccess(userId, shopIdToCheck);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only update expenses in their assigned shop' });
+    }
+
     const expense = await Expense.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
-    if (!expense) return res.status(404).json({ error: 'Expense not found' });
     return res.json(normalize(expense.toObject()));
   } catch (err) {
     console.error('[PUT /expenses/:id]', err);
@@ -100,13 +162,24 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const expense = await Expense.findByIdAndDelete(req.params.id);
+    const expense = await Expense.findById(req.params.id).lean();
     if (!expense) return res.status(404).json({ error: 'Expense not found' });
+
+    const { userId } = req.query;
+    const access = await checkCashierAccess(userId, expense.shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only delete expenses from their assigned shop' });
+    }
+
+    await Expense.findByIdAndDelete(req.params.id);
 
     await audit({
       action: 'expense_deleted',
-      userId: null, username: null, role: null,
-      targetType: 'expense', targetId: req.params.id,
+      userId: userId || null,
+      username: null,
+      role: null,
+      targetType: 'expense',
+      targetId: req.params.id,
       details: `Deleted expense "${expense.title}"`,
     });
 

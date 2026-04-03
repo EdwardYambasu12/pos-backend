@@ -1,18 +1,10 @@
-/**
- * /api/sales
- *
- * GET  /        — list sales  (filter by ?shopId= or ?from=&to= ISO dates)  [admin, manager]
- * GET  /:id     — single sale                                                [admin, manager]
- * POST /        — record a sale (also deducts product stock)                 [any authenticated]
- * DELETE /:id   — void/delete a sale                                         [admin]
- */
-
 const router = require('express').Router();
 const { v4: uuidv4 } = require('uuid');
 
 const Sale = require('../models/Sale');
 const Product = require('../models/Product');
 const AuditLog = require('../models/AuditLog');
+const User = require('../models/User');
 
 
 async function audit(data) {
@@ -23,11 +15,44 @@ async function audit(data) {
 
 function normalize({ _id, ...rest }) { return { id: String(_id), ...rest }; }
 
+/**
+ * Helper: If userId is provided and user is cashier, verify they can access the requested shopId
+ * Returns { allowed: boolean, restrictedShopId?: string } where restrictedShopId is the shop they can access
+ */
+async function checkCashierAccess(userId, requestedShopId) {
+  if (!userId) return { allowed: true }; // No restriction if no userId
+
+  const user = await User.findById(String(userId)).lean();
+  if (!user || user.role !== 'cashier') return { allowed: true }; // Only restrict cashiers
+
+  // Cashier must have a Shop assignment
+  if (!user.shopId) return { allowed: false };
+
+  // If specific shopId requested, verify it matches cashier's shop
+  if (requestedShopId && String(requestedShopId) !== String(user.shopId)) {
+    return { allowed: false };
+  }
+
+  return { allowed: true, restrictedShopId: String(user.shopId) };
+}
+
 // GET /
 router.get('/', async (req, res) => {
   try {
+    const { userId } = req.query;
+    const access = await checkCashierAccess(userId, req.query.shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only access their assigned shop' });
+    }
+
     const filter = {};
-    if (req.query.shopId) filter.shopId = req.query.shopId;
+    if (req.query.shopId) {
+      filter.shopId = req.query.shopId;
+    } else if (access.restrictedShopId) {
+      // Cashier without explicit shopId request: auto-restrict to their shop
+      filter.shopId = access.restrictedShopId;
+    }
+
     if (req.query.from || req.query.to) {
       filter.date = {};
       if (req.query.from) filter.date.$gte = req.query.from;
@@ -45,6 +70,14 @@ router.get('/:id', async (req, res) => {
   try {
     const sale = await Sale.findById(req.params.id).lean();
     if (!sale) return res.status(404).json({ error: 'Sale not found' });
+
+    // Check if cashier can access this sale's shop
+    const { userId } = req.query;
+    const access = await checkCashierAccess(userId, sale.shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only access their assigned shop' });
+    }
+
     return res.json(normalize(sale));
   } catch {
     return res.status(500).json({ error: 'Failed to fetch sale' });
@@ -53,7 +86,7 @@ router.get('/:id', async (req, res) => {
 
 // POST / — record a sale
 router.post('/', async (req, res) => {
-  const { items, totalAmount, totalProfit, date, shopId, currency } = req.body;
+  const { items, totalAmount, totalProfit, date, shopId, currency, userId } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'items array is required and must not be empty' });
@@ -63,6 +96,15 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    // Verify cashier access if userId provided
+    const access = await checkCashierAccess(userId, shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only create sales for their assigned shop' });
+    }
+
+    // If cashier and no shopId provided, use their shop
+    const finalShopId = shopId || access.restrictedShopId || null;
+
     const id = uuidv4();
     const sale = await Sale.create({
       _id: id,
@@ -70,7 +112,7 @@ router.post('/', async (req, res) => {
       totalAmount: Number(totalAmount),
       totalProfit: Number(totalProfit),
       date: date || new Date().toISOString(),
-      shopId: shopId || null,
+      shopId: finalShopId,
       currency: currency || null,
     });
 
@@ -85,8 +127,11 @@ router.post('/', async (req, res) => {
 
     await audit({
       action: 'sale_completed',
-      userId: null, username: null, role: null,
-      targetType: 'sale', targetId: id,
+      userId: userId || null,
+      username: null,
+      role: null,
+      targetType: 'sale',
+      targetId: id,
       details: `Sale of ${items.length} item(s), total ${totalAmount}`,
     });
 
@@ -97,11 +142,20 @@ router.post('/', async (req, res) => {
   }
 });
 
-// DELETE /:id — void sale (admin only)
+// DELETE /:id — void sale (admin only, or shop manager/cashier for their shop)
 router.delete('/:id', async (req, res) => {
   try {
     const sale = await Sale.findByIdAndDelete(req.params.id);
     if (!sale) return res.status(404).json({ error: 'Sale not found' });
+
+    // Check if cashier can delete this sale
+    const { userId } = req.query;
+    const access = await checkCashierAccess(userId, sale.shopId);
+    if (!access.allowed) {
+      // Re-insert the deleted record since we can't delete it
+      await Sale.create(sale);
+      return res.status(403).json({ error: 'Access denied: cashiers can only delete sales from their assigned shop' });
+    }
 
     // Restore stock
     for (const item of sale.items) {
@@ -114,8 +168,11 @@ router.delete('/:id', async (req, res) => {
 
     await audit({
       action: 'sale_voided',
-      userId: null, username: null, role: null,
-      targetType: 'sale', targetId: req.params.id,
+      userId: userId || null,
+      username: null,
+      role: null,
+      targetType: 'sale',
+      targetId: req.params.id,
       details: `Voided sale`,
     });
 

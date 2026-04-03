@@ -253,10 +253,76 @@ router.get('/public-export-core', async (_req, res) => {
  * Returns a tenant-scoped hierarchy per admin user (owner).
  * Shape: { data: [ { tenantId, owner, additionalUsers, shops: [{ ...shop, users, products }] } ] }
  *
+ * Query params:
+ *   ?userId=<id>  — If requesting user is a cashier, filters to their assigned shop only
+ *
  * The frontend's tenantService calls this endpoint.
  */
 router.get('/export-state', requireApiKey, async (req, res) => {
   try {
+    const requestingUserId = req.query.userId;
+    let requestingUser = null;
+
+    // If userId provided, fetch requesting user to check role/shop
+    if (requestingUserId) {
+      requestingUser = await User.findById(String(requestingUserId)).lean();
+    }
+
+    // If cashier, return only their shop; else return all admin tenants
+    if (requestingUser && requestingUser.role === 'cashier') {
+      if (!requestingUser.shopId) {
+        // Cashier with no shop assignment can see nothing
+        return res.json({ data: [] });
+      }
+
+      const shop = await Shop.findById(String(requestingUser.shopId)).lean();
+      if (!shop) {
+        return res.json({ data: [] });
+      }
+
+      const adminId = String(shop.ownerAdminId || shop.createdBy);
+      const admin = await User.findById(adminId).lean();
+      if (!admin) {
+        return res.json({ data: [] });
+      }
+
+      // Get all data for cashier's shop only
+      const shopUsers = await User.find({ shopId: String(requestingUser.shopId) }).select('-pin').lean();
+      const shopProducts = await Product.find({ shopId: String(requestingUser.shopId) }).lean();
+      const shopSales = await Sale.find({ shopId: String(requestingUser.shopId) }).lean();
+      const shopExpenses = await Expense.find({ shopId: String(requestingUser.shopId) }).lean();
+      const shopAuditLogs = await AuditLog.find({ }).lean(); // Filter below
+
+      const normalize = ({ _id, ...rest }) => ({ id: String(_id), ...rest });
+
+      // Filter audit logs to include only logs for the shop's users
+      const shopUserIds = new Set(shopUsers.map((u) => String(u._id)));
+      const filteredAuditLogs = shopAuditLogs.filter((log) => shopUserIds.has(String(log.userId)));
+
+      return res.json({
+        data: [
+          {
+            tenantId: adminId,
+            owner: normalize(admin),
+            additionalUsers: shopUsers.filter((u) => String(u._id) !== adminId).map(normalize),
+            shops: [
+              {
+                ...normalize(shop),
+                users: shopUsers.map(normalize),
+                products: shopProducts.map(normalize),
+              },
+            ],
+            products: shopProducts.map(normalize),
+            sales: shopSales.map(normalize),
+            expenses: shopExpenses.map(normalize),
+            auditLogs: filteredAuditLogs.map(normalize),
+            sessions: [],
+          },
+        ],
+      });
+    }
+
+    // Admin or no userId: return all tenants
     const admins = await User.find({ role: 'admin', active: true }).lean();
     const allShops = await Shop.find().lean();
     const allUsers = await User.find().select('-pin').lean();

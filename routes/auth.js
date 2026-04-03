@@ -5,6 +5,7 @@
  * POST /login     — username + pin → JWT
  * POST /logout    — mark session logoutTime (requires auth)
  * GET  /me        — current user info (requires auth)
+ * GET  /setup-status — whether any active users exist
  */
 
 const router = require('express').Router();
@@ -143,6 +144,17 @@ router.post('/register', authLimiter, async (req, res) => {
   } catch (err) {
     console.error('[POST /auth/register]', err);
     return res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// ─── GET /setup-status ───────────────────────────────────────────────────────
+router.get('/setup-status', async (_req, res) => {
+  try {
+    const activeUsers = await User.countDocuments({ active: true });
+    return res.json({ isSetup: activeUsers > 0 });
+  } catch (err) {
+    console.error('[GET /auth/setup-status]', err);
+    return res.status(500).json({ error: 'Failed to fetch setup status' });
   }
 });
 

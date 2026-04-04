@@ -17,6 +17,48 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const AuditLog = require('../models/AuditLog');
 const Subscription = require('../models/Subscription');
+const Shop = require('../models/Shop');
+const Product = require('../models/Product');
+const { requireApiKey } = require('../middleware/auth');
+
+const SEEDED_PRODUCTS = [
+  { name: 'S/Beer', costPrice: 180, sellingPrice: 240, quantity: 60 },
+  { name: 'L/Beer', costPrice: 390, sellingPrice: 450, quantity: 21 },
+  { name: 'Eazi Beer', costPrice: 180, sellingPrice: 240, quantity: 16 },
+  { name: 'M/Beer', costPrice: 300, sellingPrice: 350, quantity: 18 },
+  { name: 'Heineken', costPrice: 300, sellingPrice: 350, quantity: 27 },
+  { name: 'Stout', costPrice: 290, sellingPrice: 350, quantity: 19 },
+  { name: 'Yang', costPrice: 330, sellingPrice: 450, quantity: 11 },
+  { name: '12%', costPrice: 390, sellingPrice: 450, quantity: 5 },
+  { name: '10%', costPrice: 390, sellingPrice: 500, quantity: 24 },
+  { name: 'Malta', costPrice: 180, sellingPrice: 250, quantity: 10 },
+  { name: 'Big daddy bottle', costPrice: 100, sellingPrice: 150, quantity: 21 },
+  { name: 'Big daddy can', costPrice: 200, sellingPrice: 250, quantity: 17 },
+  { name: 'Can cook', costPrice: 150, sellingPrice: 200, quantity: 22 },
+  { name: 'Can stout', costPrice: 200, sellingPrice: 250, quantity: 22 },
+  { name: 'Bottle soft drink', costPrice: 40, sellingPrice: 70, quantity: 33 },
+  { name: 'Vody', costPrice: 250, sellingPrice: 300, quantity: 18 },
+  { name: 'Buffeo', costPrice: 150, sellingPrice: 200, quantity: 16 },
+  { name: 'Rox', costPrice: 150, sellingPrice: 200, quantity: 17 },
+  { name: 'Aloe Juice', costPrice: 390, sellingPrice: 450, quantity: 7 },
+  { name: 'Extra juice', costPrice: 150, sellingPrice: 200, quantity: 3 },
+  { name: 'Catuaba', costPrice: 390, sellingPrice: 500, quantity: 9 },
+  { name: 'Cantina wine', costPrice: 390, sellingPrice: 500, quantity: 2 },
+  { name: 'American Jin', costPrice: 180, sellingPrice: 250, quantity: 4 },
+  { name: 'Atadwe', costPrice: 100, sellingPrice: 150, quantity: 6 },
+  { name: 'Mngera 0', costPrice: 100, sellingPrice: 150, quantity: 9 },
+  { name: 'Party time', costPrice: 100, sellingPrice: 150, quantity: 12 },
+  { name: 'Live your life', costPrice: 150, sellingPrice: 200, quantity: 20 },
+  { name: 'Love wine', costPrice: 100, sellingPrice: 130, quantity: 18 },
+  { name: 'Power play', costPrice: 50, sellingPrice: 100, quantity: 12 },
+  { name: 'Run', costPrice: 70, sellingPrice: 120, quantity: 18 },
+  { name: 'Rush', costPrice: 50, sellingPrice: 100, quantity: 8 },
+  { name: 'A. Bitter', costPrice: 100, sellingPrice: 150, quantity: 9 },
+  { name: 'Roots power', costPrice: 50, sellingPrice: 100, quantity: 19 },
+  { name: 'Alomo bitter', costPrice: 150, sellingPrice: 200, quantity: 10 },
+  { name: 'Cabberian bitter', costPrice: 50, sellingPrice: 100, quantity: 30 },
+  { name: '6pm', costPrice: 50, sellingPrice: 100, quantity: 14 },
+];
 
 
 // Tighter rate limit for auth endpoints
@@ -158,6 +200,149 @@ router.get('/setup-status', async (_req, res) => {
   } catch (err) {
     console.error('[GET /auth/setup-status]', err);
     return res.status(500).json({ error: 'Failed to fetch setup status' });
+  }
+});
+
+// ─── POST /seed-initial-data ────────────────────────────────────────────────
+// Creates a default admin, two shops, and predefined products in shop 2.
+// Protected by SYNC_API_KEY because this mutates shared server data.
+router.post('/seed-initial-data', requireApiKey, async (_req, res) => {
+  try {
+    const username = 'izena';
+    const displayName = 'Izena';
+    const pin = '1988';
+    const shop1Name = 'Izee Central point Shop 1';
+    const shop2Name = 'Izee Central point shop 2';
+
+    let admin = await User.findOne({ username }).lean();
+    let adminCreated = false;
+
+    if (!admin) {
+      const adminId = uuidv4();
+      await User.create({
+        _id: adminId,
+        username,
+        displayName,
+        pin: hashPin(pin),
+        role: 'admin',
+        active: true,
+        createdAt: new Date().toISOString(),
+        createdBy: null,
+        shopId: null,
+        ownerAdminId: adminId,
+      });
+      admin = await User.findById(adminId).lean();
+      adminCreated = true;
+    }
+
+    if (!admin || !admin._id) {
+      return res.status(500).json({ error: 'Failed to resolve seeded admin account' });
+    }
+
+    const ownerAdminId = String(admin._id);
+
+    let shop1 = await Shop.findOne({ ownerAdminId, name: shop1Name }).lean();
+    let shop2 = await Shop.findOne({ ownerAdminId, name: shop2Name }).lean();
+    let shop1Created = false;
+    let shop2Created = false;
+
+    if (!shop1) {
+      const id = uuidv4();
+      await Shop.create({
+        _id: id,
+        name: shop1Name,
+        createdAt: new Date().toISOString(),
+        createdBy: ownerAdminId,
+        ownerAdminId,
+      });
+      shop1 = await Shop.findById(id).lean();
+      shop1Created = true;
+    }
+
+    if (!shop2) {
+      const id = uuidv4();
+      await Shop.create({
+        _id: id,
+        name: shop2Name,
+        createdAt: new Date().toISOString(),
+        createdBy: ownerAdminId,
+        ownerAdminId,
+      });
+      shop2 = await Shop.findById(id).lean();
+      shop2Created = true;
+    }
+
+    if (!shop2 || !shop2._id) {
+      return res.status(500).json({ error: 'Failed to resolve seeded shop 2' });
+    }
+
+    const shop2Id = String(shop2._id);
+    const existingShop2Products = await Product.find({ shopId: shop2Id }).select('name').lean();
+    const existingNames = new Set(existingShop2Products.map((item) => String(item.name)));
+
+    const productsToInsert = SEEDED_PRODUCTS
+      .filter((item) => !existingNames.has(item.name))
+      .map((item) => ({
+        _id: uuidv4(),
+        name: item.name,
+        costPrice: item.costPrice,
+        sellingPrice: item.sellingPrice,
+        quantity: item.quantity,
+        currency: 'LRD',
+        shopId: shop2Id,
+        ownerAdminId,
+        createdAt: new Date().toISOString(),
+      }));
+
+    if (productsToInsert.length > 0) {
+      await Product.insertMany(productsToInsert, { ordered: false });
+    }
+
+    const existingSubscription = await Subscription.countDocuments();
+    let subscriptionCreated = false;
+    if (existingSubscription === 0) {
+      const now = new Date();
+      const expiry = new Date(now);
+      expiry.setFullYear(expiry.getFullYear() + 1);
+      await Subscription.create({
+        _id: uuidv4(),
+        planType: 'premium',
+        status: 'active',
+        expiryDate: expiry.toISOString(),
+        activatedAt: now.toISOString(),
+        lastOpenedAt: now.toISOString(),
+      });
+      subscriptionCreated = true;
+    }
+
+    return res.json({
+      ok: true,
+      message: 'Seed completed',
+      summary: {
+        admin: {
+          username,
+          pin,
+          created: adminCreated,
+          id: ownerAdminId,
+        },
+        shops: {
+          shop1: { name: shop1Name, created: shop1Created },
+          shop2: { name: shop2Name, created: shop2Created },
+        },
+        products: {
+          requested: SEEDED_PRODUCTS.length,
+          inserted: productsToInsert.length,
+          skipped: SEEDED_PRODUCTS.length - productsToInsert.length,
+        },
+        subscription: {
+          created: subscriptionCreated,
+          planType: 'premium',
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[POST /auth/seed-initial-data]', err);
+    return res.status(500).json({ error: 'Seed failed' });
   }
 });
 

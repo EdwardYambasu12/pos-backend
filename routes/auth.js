@@ -60,6 +60,111 @@ const SEEDED_PRODUCTS = [
   { name: '6pm', costPrice: 50, sellingPrice: 100, quantity: 14 },
 ];
 
+const SEEDED_PRODUCTS_SHOP1 = [
+  { name: 'Red Bull', costPrice: 150, sellingPrice: 200, quantity: 15 },
+  { name: '10%', costPrice: 390, sellingPrice: 450, quantity: 27 },
+  { name: 'Rox', costPrice: 150, sellingPrice: 200, quantity: 22 },
+  { name: 'B/ daddy can', costPrice: 200, sellingPrice: 250, quantity: 17 },
+  { name: 'Atadwe', costPrice: 100, sellingPrice: 150, quantity: 15 },
+  { name: 's/Best', costPrice: 300, sellingPrice: 350, quantity: 24 },
+  { name: 'Master', costPrice: 200, sellingPrice: 250, quantity: 15 },
+  { name: 'Frontera', costPrice: 1050, sellingPrice: 1580, quantity: 7 },
+  { name: 'Extra Juice', costPrice: 150, sellingPrice: 200, quantity: 6 },
+  { name: 'Pure Heaven', costPrice: 390, sellingPrice: 500, quantity: 4 },
+  { name: 'Godfather', costPrice: 150, sellingPrice: 200, quantity: 17 },
+  { name: 'Power Play', costPrice: 50, sellingPrice: 120, quantity: 12 },
+  { name: 'Live Your Life', costPrice: 150, sellingPrice: 200, quantity: 3 },
+  { name: 'Coco Samba', costPrice: 150, sellingPrice: 250, quantity: 16 },
+  { name: 'Jekonmo', costPrice: 150, sellingPrice: 250, quantity: 12 },
+  { name: 'Jing', costPrice: 390, sellingPrice: 500, quantity: 7 },
+  { name: 'Gordon', costPrice: 1050, sellingPrice: 1580, quantity: 1 },
+  { name: 'American Gin', costPrice: 180, sellingPrice: 250, quantity: 11 },
+  { name: 'Deward\'s', costPrice: 1050, sellingPrice: 1580, quantity: 4 },
+  { name: 'stout', costPrice: 290, sellingPrice: 350, quantity: 73 },
+  { name: 'S/beer', costPrice: 180, sellingPrice: 250, quantity: 63 },
+  { name: 'Malta', costPrice: 180, sellingPrice: 250, quantity: 18 },
+  { name: 'Budweiser', costPrice: 350, sellingPrice: 450, quantity: 10 },
+  { name: 'yang', costPrice: 330, sellingPrice: 450, quantity: 35 },
+  { name: 'Heineken', costPrice: 300, sellingPrice: 350, quantity: 4 },
+  { name: 'Tsingtao', costPrice: 350, sellingPrice: 450, quantity: 20 },
+  { name: 'L/beer', costPrice: 390, sellingPrice: 450, quantity: 14 },
+  { name: 'Breezeer', costPrice: 250, sellingPrice: 350, quantity: 12 },
+  { name: 'M/beer', costPrice: 300, sellingPrice: 350, quantity: 28 },
+  { name: 'Water', costPrice: 25, sellingPrice: 100, quantity: 70 },
+  { name: 'Origin B', costPrice: 400, sellingPrice: 450, quantity: 17 },
+  { name: 'Origin S', costPrice: 300, sellingPrice: 350, quantity: 6 },
+  { name: 'Catuaba', costPrice: 390, sellingPrice: 500, quantity: 15 },
+  { name: 'Booster', costPrice: 150, sellingPrice: 250, quantity: 29 },
+  { name: 'Aloe Juice', costPrice: 390, sellingPrice: 450, quantity: 16 },
+  { name: '72', costPrice: 150, sellingPrice: 200, quantity: 21 },
+  { name: 'Bottle Cola', costPrice: 50, sellingPrice: 100, quantity: 20 },
+  { name: 'Vimto', costPrice: 150, sellingPrice: 200, quantity: 26 },
+  { name: 'Vody', costPrice: 250, sellingPrice: 300, quantity: 37 },
+  { name: 'CaN Soft Drink', costPrice: 150, sellingPrice: 200, quantity: 36 },
+  { name: 'Buffalo', costPrice: 150, sellingPrice: 200, quantity: 30 },
+];
+
+const SEEDED_PRODUCTS_SHOP2 = [
+  { name: 'S/Beer', costPrice: 180, sellingPrice: 240, quantity: 67 },
+  { name: 'L/Beer', costPrice: 390, sellingPrice: 450, quantity: 31 },
+  { name: 'M/Beer', costPrice: 300, sellingPrice: 350, quantity: 12 },
+  { name: 'Eazi Beer', costPrice: 180, sellingPrice: 240, quantity: 15 },
+  { name: 'Yang', costPrice: 330, sellingPrice: 450, quantity: 10 },
+  { name: 'Stout', costPrice: 290, sellingPrice: 350, quantity: 108 },
+  { name: 'Malta', costPrice: 180, sellingPrice: 250, quantity: 37 },
+  { name: 'Heineken', costPrice: 300, sellingPrice: 350, quantity: 19 },
+  { name: 'Bottle Soft Drinks', costPrice: 40, sellingPrice: 70, quantity: 58 },
+  { name: 'Sole Juice', costPrice: 390, sellingPrice: 500, quantity: 6 },
+  { name: 'Cantina Wine', costPrice: 390, sellingPrice: 500, quantity: 2 },
+  { name: 'Aloe Juice', costPrice: 390, sellingPrice: 450, quantity: 6 },
+  { name: '10%', costPrice: 390, sellingPrice: 450, quantity: 22 },
+  { name: 'Big Daddy can', costPrice: 200, sellingPrice: 250, quantity: 26 },
+  { name: 'Origin', costPrice: 350, sellingPrice: 450, quantity: 9 },
+  { name: 'Apple Gin', costPrice: 100, sellingPrice: 150, quantity: 7 },
+  { name: 'Catuaba', costPrice: 390, sellingPrice: 500, quantity: 8 },
+  { name: 'Water', costPrice: 25, sellingPrice: 100, quantity: 34 },
+  { name: '12%', costPrice: 390, sellingPrice: 450, quantity: 5 },
+  { name: 'Extra Juice', costPrice: 150, sellingPrice: 200, quantity: 3 },
+  { name: 'Vimto', costPrice: 150, sellingPrice: 200, quantity: 6 },
+  { name: 'Run', costPrice: 70, sellingPrice: 120, quantity: 11 },
+  { name: 'American Gin', costPrice: 180, sellingPrice: 250, quantity: 4 },
+  { name: 'Caribbean Bitters', costPrice: 50, sellingPrice: 100, quantity: 30 },
+  { name: 'Roots', costPrice: 150, sellingPrice: 200, quantity: 18 },
+  { name: 'Booster', costPrice: 150, sellingPrice: 250, quantity: 2 },
+  { name: 'Roots (P)', costPrice: 100, sellingPrice: 150, quantity: 9 },
+  { name: 'Vody', costPrice: 250, sellingPrice: 300, quantity: 28 },
+  { name: 'can Stout', costPrice: 200, sellingPrice: 250, quantity: 20 },
+  { name: 'Coca Cola', costPrice: 50, sellingPrice: 100, quantity: 20 },
+  { name: 'Rox', costPrice: 150, sellingPrice: 200, quantity: 12 },
+  { name: 'Buffalo', costPrice: 150, sellingPrice: 200, quantity: 29 },
+  { name: 'Jing', costPrice: 390, sellingPrice: 500, quantity: 4 },
+  { name: 'Godfather', costPrice: 150, sellingPrice: 200, quantity: 11 },
+  { name: 'Best Gin (Big)', costPrice: 400, sellingPrice: 450, quantity: 14 },
+  { name: 'Best Gin (Small)', costPrice: 300, sellingPrice: 350, quantity: 26 },
+  { name: 'Caribbean Ginger', costPrice: 100, sellingPrice: 150, quantity: 2 },
+  { name: 'Brown Top', costPrice: 100, sellingPrice: 200, quantity: 10 },
+  { name: 'Master Gin', costPrice: 200, sellingPrice: 250, quantity: 17 },
+  { name: 'Cafe Rum', costPrice: 50, sellingPrice: 120, quantity: 28 },
+  { name: 'Jekonmo', costPrice: 150, sellingPrice: 250, quantity: 9 },
+  { name: 'Coco Samba', costPrice: 150, sellingPrice: 250, quantity: 8 },
+  { name: 'Jah jah', costPrice: 100, sellingPrice: 150, quantity: 17 },
+  { name: '6pm', costPrice: 50, sellingPrice: 100, quantity: 14 },
+  { name: 'Power Play', costPrice: 50, sellingPrice: 120, quantity: 11 },
+  { name: 'P/Punch', costPrice: 50, sellingPrice: 100, quantity: 2 },
+  { name: 'Live Your Life', costPrice: 150, sellingPrice: 200, quantity: 20 },
+  { name: 'Bon Fish', costPrice: 100, sellingPrice: 150, quantity: 13 },
+  { name: 'Party Time', costPrice: 100, sellingPrice: 150, quantity: 12 },
+  { name: 'Big Daddy Bottle', costPrice: 100, sellingPrice: 150, quantity: 17 },
+  { name: 'rush', costPrice: 50, sellingPrice: 100, quantity: 6 },
+  { name: 'Moringa', costPrice: 100, sellingPrice: 150, quantity: 8 },
+  { name: 'Atadwe', costPrice: 100, sellingPrice: 150, quantity: 19 },
+  { name: 'Alomo bitter', costPrice: 150, sellingPrice: 200, quantity: 9 },
+  { name: 'Love Wine', costPrice: 100, sellingPrice: 130, quantity: 17 },
+  { name: 'You And Me', costPrice: 50, sellingPrice: 100, quantity: 21 },
+  { name: 'Aperitif Bitters', costPrice: 100, sellingPrice: 150, quantity: 24 },
+  { name: 'Army Bitters', costPrice: 100, sellingPrice: 150, quantity: 8 },
+];
+
 
 // Tighter rate limit for auth endpoints
 const authLimiter = rateLimit({
@@ -211,8 +316,8 @@ router.post('/seed-initial-data', requireApiKey, async (_req, res) => {
     const username = 'izena';
     const displayName = 'Izena';
     const pin = '1988';
-    const shop1Name = 'Izee Central point Shop 1';
-    const shop2Name = 'Izee Central point shop 2';
+    const shop1Name = 'Izee Central Point Shop 1';
+    const shop2Name = 'Izee Central Point Shop 2';
 
     let admin = await User.findOne({ username }).lean();
     let adminCreated = false;
@@ -272,16 +377,41 @@ router.post('/seed-initial-data', requireApiKey, async (_req, res) => {
       shop2Created = true;
     }
 
+    if (!shop1 || !shop1._id) {
+      return res.status(500).json({ error: 'Failed to resolve seeded shop 1' });
+    }
+
     if (!shop2 || !shop2._id) {
       return res.status(500).json({ error: 'Failed to resolve seeded shop 2' });
     }
 
+    const shop1Id = String(shop1._id);
     const shop2Id = String(shop2._id);
-    const existingShop2Products = await Product.find({ shopId: shop2Id }).select('name').lean();
-    const existingNames = new Set(existingShop2Products.map((item) => String(item.name)));
 
-    const productsToInsert = SEEDED_PRODUCTS
-      .filter((item) => !existingNames.has(item.name))
+    // Seed products for Shop 1
+    const existingShop1Products = await Product.find({ shopId: shop1Id }).select('name').lean();
+    const existingNamesShop1 = new Set(existingShop1Products.map((item) => String(item.name)));
+
+    const productsToInsertShop1 = SEEDED_PRODUCTS_SHOP1
+      .filter((item) => !existingNamesShop1.has(item.name))
+      .map((item) => ({
+        _id: uuidv4(),
+        name: item.name,
+        costPrice: item.costPrice,
+        sellingPrice: item.sellingPrice,
+        quantity: item.quantity,
+        currency: 'LRD',
+        shopId: shop1Id,
+        ownerAdminId,
+        createdAt: new Date().toISOString(),
+      }));
+
+    // Seed products for Shop 2
+    const existingShop2Products = await Product.find({ shopId: shop2Id }).select('name').lean();
+    const existingNamesShop2 = new Set(existingShop2Products.map((item) => String(item.name)));
+
+    const productsToInsertShop2 = SEEDED_PRODUCTS_SHOP2
+      .filter((item) => !existingNamesShop2.has(item.name))
       .map((item) => ({
         _id: uuidv4(),
         name: item.name,
@@ -294,8 +424,12 @@ router.post('/seed-initial-data', requireApiKey, async (_req, res) => {
         createdAt: new Date().toISOString(),
       }));
 
-    if (productsToInsert.length > 0) {
-      await Product.insertMany(productsToInsert, { ordered: false });
+    if (productsToInsertShop1.length > 0) {
+      await Product.insertMany(productsToInsertShop1, { ordered: false });
+    }
+
+    if (productsToInsertShop2.length > 0) {
+      await Product.insertMany(productsToInsertShop2, { ordered: false });
     }
 
     const existingSubscription = await Subscription.countDocuments();
@@ -330,9 +464,21 @@ router.post('/seed-initial-data', requireApiKey, async (_req, res) => {
           shop2: { name: shop2Name, created: shop2Created },
         },
         products: {
-          requested: SEEDED_PRODUCTS.length,
-          inserted: productsToInsert.length,
-          skipped: SEEDED_PRODUCTS.length - productsToInsert.length,
+          shop1: {
+            requested: SEEDED_PRODUCTS_SHOP1.length,
+            inserted: productsToInsertShop1.length,
+            skipped: SEEDED_PRODUCTS_SHOP1.length - productsToInsertShop1.length,
+          },
+          shop2: {
+            requested: SEEDED_PRODUCTS_SHOP2.length,
+            inserted: productsToInsertShop2.length,
+            skipped: SEEDED_PRODUCTS_SHOP2.length - productsToInsertShop2.length,
+          },
+          total: {
+            requested: SEEDED_PRODUCTS_SHOP1.length + SEEDED_PRODUCTS_SHOP2.length,
+            inserted: productsToInsertShop1.length + productsToInsertShop2.length,
+            skipped: (SEEDED_PRODUCTS_SHOP1.length - productsToInsertShop1.length) + (SEEDED_PRODUCTS_SHOP2.length - productsToInsertShop2.length),
+          },
         },
         subscription: {
           created: subscriptionCreated,

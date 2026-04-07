@@ -15,6 +15,8 @@ const shopRoutes = require('./routes/shops');
 const categoryRoutes = require('./routes/categories');
 const auditRoutes = require('./routes/audit');
 const backupRoutes = require('./routes/backup');
+const snapshotRoutes = require('./routes/snapshot');
+const DataSnapshot = require('./models/DataSnapshot');
 
 const app = express();
 
@@ -157,6 +159,72 @@ mongoose
     process.exit(1);
   });
 
+const SNAPSHOT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
+async function createDataSnapshot() {
+  try {
+    const [
+      users,
+      shops,
+      products,
+      sales,
+      expenses,
+      categories,
+      auditLogs,
+      sessions,
+      settings,
+      licenses,
+      subscriptions,
+      backups,
+    ] = await Promise.all([
+      require('./models/User').find().lean(),
+      require('./models/Shop').find().lean(),
+      require('./models/Product').find().lean(),
+      require('./models/Sale').find().lean(),
+      require('./models/Expense').find().lean(),
+      require('./models/Category').find().lean(),
+      require('./models/AuditLog').find().lean(),
+      require('./models/Session').find().lean(),
+      require('./models/Settings').find().lean(),
+      require('./models/License').find().lean(),
+      require('./models/Subscription').find().lean(),
+      require('./models/Backup').find().lean(),
+    ]);
+
+    const snapshot = new DataSnapshot({
+      _id: `snapshot_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      version: process.env.APP_VERSION || '1.0.0',
+      data: {
+        users,
+        shops,
+        products,
+        sales,
+        expenses,
+        categories,
+        auditLogs,
+        sessions,
+        settings,
+        licenses,
+        subscriptions,
+        backups,
+      },
+    });
+
+    await snapshot.save();
+    console.log(`[Snapshot] Created data snapshot ${snapshot._id} with ${
+      users.length + shops.length + products.length + sales.length + expenses.length + categories.length + auditLogs.length + sessions.length + settings.length + licenses.length + subscriptions.length + backups.length
+    } records.`);
+  } catch (err) {
+    console.error('[Snapshot] Failed to create data snapshot:', err.message);
+  }
+}
+
+setTimeout(() => {
+  createDataSnapshot();
+  setInterval(createDataSnapshot, SNAPSHOT_INTERVAL_MS);
+}, SNAPSHOT_INTERVAL_MS);
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/sync', syncRoutes);
@@ -168,6 +236,7 @@ app.use('/api/shops', shopRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/backup', backupRoutes);
+app.use('/api/snapshot', snapshotRoutes);
 
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));

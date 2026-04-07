@@ -14,6 +14,7 @@ const expenseRoutes = require('./routes/expenses');
 const shopRoutes = require('./routes/shops');
 const categoryRoutes = require('./routes/categories');
 const auditRoutes = require('./routes/audit');
+const backupRoutes = require('./routes/backup');
 
 const app = express();
 
@@ -166,6 +167,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/backup', backupRoutes);
 
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));

@@ -171,23 +171,26 @@ router.post('/:id/reset-pin', async (req, res) => {
 // DELETE /:id — soft deactivate
 router.delete('/:id', async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(req.params.id, { $set: { active: false } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const user = await User.findByIdAndDelete(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     await audit({
-      action: 'user_deactivated',
+      action: 'user_deleted',
       userId: null,
       username: null,
       role: null,
       targetType: 'user',
       targetId: req.params.id,
-      details: `Deactivated user "${user.displayName}"`,
+      details: `Deleted user "${user.displayName}"`,
     });
 
     return res.json({ ok: true });
   } catch (err) {
     console.error('[DELETE /users/:id]', err);
-    return res.status(500).json({ error: 'Failed to deactivate user' });
+    return res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 

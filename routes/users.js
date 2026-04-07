@@ -168,14 +168,17 @@ router.post('/:id/reset-pin', async (req, res) => {
   }
 });
 
-// DELETE /:id — soft deactivate
+// DELETE /:id — hard delete (same pattern as soft deactivate)
 router.delete('/:id', async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
-
+    // Find the user first (so you can log details like displayName)
+    const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    // Then delete
+    await User.deleteOne({ _id: req.params.id });
 
     await audit({
       action: 'user_deleted',

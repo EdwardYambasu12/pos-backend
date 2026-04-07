@@ -61,6 +61,38 @@ function isDuplicateKeyError(err) {
   return Boolean(err && (err.code === 11000 || String(err.message || '').includes('E11000')));
 }
 
+async function inferOwnerAdminId(collection, cleaned) {
+  if (cleaned.ownerAdminId) {
+    return String(cleaned.ownerAdminId);
+  }
+
+  if (cleaned.shopId) {
+    try {
+      const shop = await Shop.findById(String(cleaned.shopId)).select('ownerAdminId createdBy').lean();
+      const inferredOwner = shop?.ownerAdminId || shop?.createdBy;
+      if (inferredOwner) {
+        return String(inferredOwner);
+      }
+    } catch {
+      // Ignore inference failures and fall through to other strategies.
+    }
+  }
+
+  if ((collection === 'auditLogs' || collection === 'sessions') && cleaned.userId) {
+    try {
+      const user = await User.findById(String(cleaned.userId)).select('ownerAdminId createdBy').lean();
+      const inferredOwner = user?.ownerAdminId || user?.createdBy;
+      if (inferredOwner) {
+        return String(inferredOwner);
+      }
+    } catch {
+      // Ignore inference failures and fall through.
+    }
+  }
+
+  return undefined;
+}
+
 async function buildFullSnapshot() {
   const [
     products,
@@ -125,16 +157,9 @@ router.post('/upsert', requireApiKey, async (req, res) => {
     cleaned.username = cleaned.username.toLowerCase().trim();
   }
 
-  if (collection === 'products' && !cleaned.ownerAdminId && cleaned.shopId) {
-    try {
-      const shop = await Shop.findById(String(cleaned.shopId)).select('ownerAdminId createdBy').lean();
-      const inferredOwner = shop?.ownerAdminId || shop?.createdBy;
-      if (inferredOwner) {
-        cleaned.ownerAdminId = String(inferredOwner);
-      }
-    } catch {
-      // Keep original payload if ownership inference fails.
-    }
+  const inferredOwnerAdminId = await inferOwnerAdminId(collection, cleaned);
+  if (inferredOwnerAdminId) {
+    cleaned.ownerAdminId = inferredOwnerAdminId;
   }
 
   try {
@@ -164,31 +189,7 @@ router.post('/upsert', requireApiKey, async (req, res) => {
   }
 });
 
-// ─── POST /delete ─────────────────────────────────────────────────────────────
-router.post('/delete', requireApiKey, async (req, res) => {
-  if (!ALLOW_REMOTE_SYNC_DELETE) {
-    return res.status(403).json({ error: 'Remote sync delete is disabled' });
-  }
 
-  const { collection, id } = req.body;
-
-  if (!collection || !id) {
-    return res.status(400).json({ error: 'collection and id are required' });
-  }
-
-  const Model = MODEL_MAP[collection];
-  if (!Model) {
-    return res.status(400).json({ error: `Unknown collection: ${collection}` });
-  }
-
-  try {
-    await Model.findByIdAndDelete(String(id));
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error(`[sync/delete] ${collection}/${id}:`, err.message);
-    return res.status(500).json({ error: 'Delete failed' });
-  }
-});
 
 // ─── GET /export-all ──────────────────────────────────────────────────────────
 /**

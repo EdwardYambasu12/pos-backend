@@ -259,6 +259,13 @@ router.get('/public-export-core', async (_req, res) => {
  * The frontend's tenantService calls this endpoint.
  */
 router.get('/export-state', requireApiKey, async (req, res) => {
+  // Prevent caching of tenant data - critical for login and data freshness
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+
   try {
     const requestingUserId = req.query.userId;
     let requestingUser = null;
@@ -410,6 +417,13 @@ router.get('/export-state', requireApiKey, async (req, res) => {
 
 // ─── GET /export-tenants (legacy alias) ───────────────────────────────────────
 router.get('/export-tenants', requireApiKey, async (req, res) => {
+  // Prevent caching of tenant data - critical for login and data freshness
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+
   try {
     const admins = await User.find({ role: 'admin', active: true }).lean();
     const allShops = await Shop.find().lean();

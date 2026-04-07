@@ -299,6 +299,13 @@ router.post('/register', authLimiter, async (req, res) => {
 
 // ─── GET /setup-status ───────────────────────────────────────────────────────
 router.get('/setup-status', async (_req, res) => {
+  // Prevent caching of setup status - critical for app initialization
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+
   try {
     const activeUsers = await User.countDocuments({ active: true });
     return res.json({ isSetup: activeUsers > 0 });
@@ -498,6 +505,13 @@ router.post('/seed-initial-data', requireApiKey, async (_req, res) => {
  * Returns: { token, user, subscription? }
  */
 router.post('/login', authLimiter, async (req, res) => {
+  // Prevent caching of login responses - critical for authentication
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+
   const { username, pin } = req.body;
   const device = deviceFromUA(req.headers['user-agent']);
 
@@ -640,6 +654,13 @@ router.post('/logout', async (req, res) => {
 
 // ─── GET /me ──────────────────────────────────────────────────────────────────
 router.get('/me', async (req, res) => {
+  // Prevent caching of user data - critical for session management
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId query param required' });
 

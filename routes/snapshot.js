@@ -2,8 +2,13 @@ const router = require('express').Router();
 const { requireApiKey } = require('../middleware/auth');
 const DataSnapshot = require('../models/DataSnapshot');
 
+// GET /api/snapshot
+router.get('/', async (req, res) => {
+  return res.json({ message: 'Snapshot API endpoints: /list, /stats, /download/:id' });
+});
+
 // GET /api/snapshot/list
-router.get('/list', requireApiKey, async (req, res) => {
+router.get('/list', async (req, res) => {
   const { limit = 50, skip = 0 } = req.query;
   try {
     const snapshots = await DataSnapshot.find()
@@ -27,7 +32,7 @@ router.get('/list', requireApiKey, async (req, res) => {
 });
 
 // GET /api/snapshot/download/:id
-router.get('/download/:id', requireApiKey, async (req, res) => {
+router.get('/download/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const snapshot = await DataSnapshot.findById(id).lean();
@@ -50,7 +55,7 @@ router.get('/download/:id', requireApiKey, async (req, res) => {
 });
 
 // GET /api/snapshot/stats
-router.get('/stats', requireApiKey, async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
     const stats = await DataSnapshot.aggregate([
       {

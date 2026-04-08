@@ -183,4 +183,25 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// 🔥 DEBUG ROUTE — NO AUTH, NO FILTER
+router.get('/debug/all-sales', async (req, res) => {
+  try {
+    const sales = await Sale.find().lean();
+
+    return res.json({
+      count: sales.length,
+      sales: sales.map(s => ({
+        id: s._id,
+        shopId: s.shopId,
+        ownerAdminId: s.ownerAdminId,
+        totalAmount: s.totalAmount,
+        date: s.date,
+      })),
+    });
+  } catch (err) {
+    console.error('[DEBUG SALES]', err);
+    return res.status(500).json({ error: 'Failed to fetch all sales' });
+  }
+});
+
 module.exports = router;

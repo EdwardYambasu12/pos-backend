@@ -61,38 +61,6 @@ function isDuplicateKeyError(err) {
   return Boolean(err && (err.code === 11000 || String(err.message || '').includes('E11000')));
 }
 
-async function inferOwnerAdminId(collection, cleaned) {
-  if (cleaned.ownerAdminId) {
-    return String(cleaned.ownerAdminId);
-  }
-
-  if (cleaned.shopId) {
-    try {
-      const shop = await Shop.findById(String(cleaned.shopId)).select('ownerAdminId createdBy').lean();
-      const inferredOwner = shop?.ownerAdminId || shop?.createdBy;
-      if (inferredOwner) {
-        return String(inferredOwner);
-      }
-    } catch {
-      // Ignore inference failures and fall through to other strategies.
-    }
-  }
-
-  if ((collection === 'auditLogs' || collection === 'sessions') && cleaned.userId) {
-    try {
-      const user = await User.findById(String(cleaned.userId)).select('ownerAdminId createdBy').lean();
-      const inferredOwner = user?.ownerAdminId || user?.createdBy;
-      if (inferredOwner) {
-        return String(inferredOwner);
-      }
-    } catch {
-      // Ignore inference failures and fall through.
-    }
-  }
-
-  return undefined;
-}
-
 async function buildFullSnapshot() {
   const [
     products,
@@ -150,22 +118,85 @@ router.post('/upsert', requireApiKey, async (req, res) => {
     return res.status(400).json({ error: `Unknown collection: ${collection}` });
   }
 
-  const cleaned = sanitizeDoc(doc);
+  let cleaned = sanitizeDoc(doc);
   cleaned._id = String(id);
 
-  if (collection === 'users' && typeof cleaned.username === 'string') {
-    cleaned.username = cleaned.username.toLowerCase().trim();
-  }
-
-  const inferredOwnerAdminId = await inferOwnerAdminId(collection, cleaned);
-  if (inferredOwnerAdminId) {
-    cleaned.ownerAdminId = inferredOwnerAdminId;
-  }
+  // ✅ 1. REMOVE null / undefined values (CRITICAL)
+  Object.keys(cleaned).forEach((key) => {
+    if (cleaned[key] === undefined || cleaned[key] === null) {
+      delete cleaned[key];
+    }
+  });
 
   try {
-    await Model.findByIdAndUpdate(String(id), { $set: cleaned }, { upsert: true, new: true });
+    const existing = await Model.findById(String(id)).lean();
+
+    // ✅ 2. Prevent stale data overwrite (VERY IMPORTANT)
+    if (
+      existing &&
+      cleaned.updatedAt &&
+      existing.updatedAt &&
+      new Date(existing.updatedAt) > new Date(cleaned.updatedAt)
+    ) {
+      return res.json({ skipped: true, reason: 'stale update' });
+    }
+
+    // ✅ 3. Protect critical fields (especially USERS)
+    if (existing) {
+      if (collection === 'users') {
+        cleaned.role = existing.role;
+        cleaned.ownerAdminId = existing.ownerAdminId;
+        cleaned.shopId = existing.shopId;
+      }
+
+      if (collection === 'products') {
+        cleaned.ownerAdminId = existing.ownerAdminId;
+      }
+    }
+
+    // ✅ 4. Normalize username safely
+    if (collection === 'users' && typeof cleaned.username === 'string') {
+      cleaned.username = cleaned.username.toLowerCase().trim();
+    }
+
+    // ✅ 5. Infer ownership safely (your original logic)
+    if (collection === 'products' && !cleaned.ownerAdminId && cleaned.shopId) {
+      try {
+        const shop = await Shop.findById(String(cleaned.shopId))
+          .select('ownerAdminId createdBy')
+          .lean();
+
+        const inferredOwner = shop?.ownerAdminId || shop?.createdBy;
+        if (inferredOwner) {
+          cleaned.ownerAdminId = String(inferredOwner);
+        }
+      } catch {
+        // ignore safely
+      }
+    }
+
+    // ✅ 6. Backup BEFORE update (LIFESAVER)
+    if (existing) {
+      await AuditLog.create({
+        action: 'backup-before-update',
+        collection,
+        docId: id,
+        previous: existing,
+        timestamp: new Date(),
+      });
+    }
+
+    // ✅ 7. SAFE UPDATE (no overwrite, only valid fields)
+    await Model.findByIdAndUpdate(
+      String(id),
+      { $set: cleaned },
+      { upsert: true, new: true }
+    );
+
     return res.json({ ok: true });
+
   } catch (err) {
+    // ✅ 8. Duplicate username fallback (your original logic improved)
     if (collection === 'users' && isDuplicateKeyError(err) && cleaned.username) {
       try {
         const { _id: _ignoredId, ...updatePayload } = cleaned;
@@ -173,7 +204,7 @@ router.post('/upsert', requireApiKey, async (req, res) => {
         const updated = await Model.findOneAndUpdate(
           { username: cleaned.username },
           { $set: updatePayload },
-          { new: true },
+          { new: true }
         );
 
         if (updated) {
@@ -190,55 +221,6 @@ router.post('/upsert', requireApiKey, async (req, res) => {
 });
 
 
-// ─── POST /full-sync ─────────────────────────────────────────────────────────
-router.post('/full-sync', requireApiKey, async (req, res) => {
-  try {
-    const { scope, data } = req.body;
-
-    const { ownerAdminId, shopId } = scope || {};
-
-    if (!ownerAdminId || !shopId) {
-      return res.status(400).json({ error: 'Missing ownerAdminId or shopId in scope' });
-    }
-
-    // 🔥 LOOP THROUGH ALL COLLECTIONS (uses your MODEL_MAP)
-    for (const [collection, records] of Object.entries(data || {})) {
-      const Model = MODEL_MAP[collection];
-      if (!Model || !Array.isArray(records) || records.length === 0) continue;
-
-      const ops = records.map((doc) => {
-        const cleaned = sanitizeDoc(doc);
-
-        // 🔥 FORCE REQUIRED FIELDS
-        cleaned.ownerAdminId = ownerAdminId;
-        cleaned.shopId = shopId;
-        cleaned.updatedAt = doc.updatedAt || Date.now();
-
-        return {
-          updateOne: {
-            filter: { _id: String(cleaned._id) },
-            update: { $set: cleaned },
-            upsert: true,
-          },
-        };
-      });
-
-      if (ops.length > 0) {
-        await Model.bulkWrite(ops);
-      }
-    }
-
-    console.log('✅ FULL SYNC RECEIVED:', {
-      sales: data?.sales?.length || 0,
-    });
-
-    return res.json({ ok: true });
-
-  } catch (err) {
-    console.error('[sync/full-sync]', err);
-    return res.status(500).json({ error: 'Full sync failed' });
-  }
-});
 // ─── GET /export-all ──────────────────────────────────────────────────────────
 /**
  * Returns all documents from every collection as a flat snapshot object.
@@ -308,13 +290,6 @@ router.get('/public-export-core', async (_req, res) => {
  * The frontend's tenantService calls this endpoint.
  */
 router.get('/export-state', requireApiKey, async (req, res) => {
-  // Prevent caching of tenant data - critical for login and data freshness
-  res.set({
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-  });
-
   try {
     const requestingUserId = req.query.userId;
     let requestingUser = null;
@@ -466,13 +441,6 @@ router.get('/export-state', requireApiKey, async (req, res) => {
 
 // ─── GET /export-tenants (legacy alias) ───────────────────────────────────────
 router.get('/export-tenants', requireApiKey, async (req, res) => {
-  // Prevent caching of tenant data - critical for login and data freshness
-  res.set({
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-  });
-
   try {
     const admins = await User.find({ role: 'admin', active: true }).lean();
     const allShops = await Shop.find().lean();

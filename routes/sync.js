@@ -104,7 +104,124 @@ async function buildFullSnapshot() {
     subscriptions: normalize(subscriptions),
   };
 }
+router.post('/batch', requireApiKey, async (req, res) => {
+  const { operations } = req.body;
 
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return res.status(400).json({ error: 'operations array is required' });
+  }
+
+  const results = [];
+  const errors = [];
+
+  for (const op of operations) {
+    const { collection, id, doc } = op;
+
+    if (!collection || !id || !doc) {
+      errors.push({ op, error: 'Invalid operation format' });
+      continue;
+    }
+
+    const Model = MODEL_MAP[collection];
+    if (!Model) {
+      errors.push({ op, error: `Unknown collection: ${collection}` });
+      continue;
+    }
+
+    let cleaned = sanitizeDoc(doc);
+    cleaned._id = String(id);
+
+    // ✅ Remove null/undefined (CRITICAL)
+    Object.keys(cleaned).forEach((key) => {
+      if (cleaned[key] === undefined || cleaned[key] === null) {
+        delete cleaned[key];
+      }
+    });
+
+    try {
+      const existing = await Model.findById(String(id)).lean();
+
+      // ✅ Prevent stale overwrite
+      if (
+        existing &&
+        cleaned.updatedAt &&
+        existing.updatedAt &&
+        new Date(existing.updatedAt) > new Date(cleaned.updatedAt)
+      ) {
+        results.push({ id, status: 'skipped', reason: 'stale' });
+        continue;
+      }
+
+      // ✅ Protect critical fields
+      if (existing) {
+        if (collection === 'users') {
+          cleaned.role = existing.role;
+          cleaned.ownerAdminId = existing.ownerAdminId;
+          cleaned.shopId = existing.shopId;
+        }
+
+        if (collection === 'products') {
+          cleaned.ownerAdminId = existing.ownerAdminId;
+        }
+      }
+
+      // ✅ Normalize username
+      if (collection === 'users' && typeof cleaned.username === 'string') {
+        cleaned.username = cleaned.username.toLowerCase().trim();
+      }
+
+      // ✅ SALES = append-only (IMPORTANT)
+      if (collection === 'sales') {
+        const exists = await Model.findById(String(id));
+        if (exists) {
+          results.push({ id, status: 'skipped', reason: 'exists' });
+          continue;
+        }
+
+        await Model.create(cleaned);
+        results.push({ id, status: 'created' });
+        continue;
+      }
+
+      // ✅ Backup before update
+      if (existing) {
+        await AuditLog.create({
+          action: 'backup-before-update',
+          collection,
+          docId: id,
+          previous: existing,
+          timestamp: new Date(),
+        });
+      }
+
+      // ✅ Upsert safely
+      await Model.findByIdAndUpdate(
+        String(id),
+        { $set: cleaned },
+        { upsert: true, new: true }
+      );
+
+      results.push({ id, status: 'ok' });
+
+    } catch (err) {
+      console.error(`[sync/batch] ${collection}/${id}:`, err.message);
+
+      errors.push({
+        id,
+        collection,
+        error: err.message,
+      });
+    }
+  }
+
+  return res.json({
+    ok: true,
+    processed: results.length,
+    failed: errors.length,
+    results,
+    errors,
+  });
+});
 // ─── POST /upsert ─────────────────────────────────────────────────────────────
 router.post('/upsert', requireApiKey, async (req, res) => {
   const { collection, id, doc } = req.body;

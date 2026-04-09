@@ -190,7 +190,55 @@ router.post('/upsert', requireApiKey, async (req, res) => {
 });
 
 
+// ─── POST /full-sync ─────────────────────────────────────────────────────────
+router.post('/full-sync', requireApiKey, async (req, res) => {
+  try {
+    const { scope, data } = req.body;
 
+    const { ownerAdminId, shopId } = scope || {};
+
+    if (!ownerAdminId || !shopId) {
+      return res.status(400).json({ error: 'Missing ownerAdminId or shopId in scope' });
+    }
+
+    // 🔥 LOOP THROUGH ALL COLLECTIONS (uses your MODEL_MAP)
+    for (const [collection, records] of Object.entries(data || {})) {
+      const Model = MODEL_MAP[collection];
+      if (!Model || !Array.isArray(records) || records.length === 0) continue;
+
+      const ops = records.map((doc) => {
+        const cleaned = sanitizeDoc(doc);
+
+        // 🔥 FORCE REQUIRED FIELDS
+        cleaned.ownerAdminId = ownerAdminId;
+        cleaned.shopId = shopId;
+        cleaned.updatedAt = doc.updatedAt || Date.now();
+
+        return {
+          updateOne: {
+            filter: { _id: String(cleaned._id) },
+            update: { $set: cleaned },
+            upsert: true,
+          },
+        };
+      });
+
+      if (ops.length > 0) {
+        await Model.bulkWrite(ops);
+      }
+    }
+
+    console.log('✅ FULL SYNC RECEIVED:', {
+      sales: data?.sales?.length || 0,
+    });
+
+    return res.json({ ok: true });
+
+  } catch (err) {
+    console.error('[sync/full-sync]', err);
+    return res.status(500).json({ error: 'Full sync failed' });
+  }
+});
 // ─── GET /export-all ──────────────────────────────────────────────────────────
 /**
  * Returns all documents from every collection as a flat snapshot object.

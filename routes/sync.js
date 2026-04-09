@@ -111,11 +111,33 @@ router.post('/batch', requireApiKey, async (req, res) => {
     return res.status(400).json({ error: 'operations array is required' });
   }
 
-  const results = [];
+  const results =  [];
   const errors = [];
 
   for (const op of operations) {
-    const { collection, id, doc } = op;
+    const { collection, id, doc, operation } = op;
+
+    for (const op of operations) {
+  const { collection, id, doc, operation } = op;
+
+  const Model = MODEL_MAP[collection];
+  if (!Model) continue;
+
+  // ✅ ADD THIS BLOCK HERE
+  if (operation === 'delete') {
+    await Model.findByIdAndDelete(String(id));
+    continue;
+  }
+
+  if (!doc) continue; // prevent bad updates
+
+  // 👇 THIS WAS ALREADY IN YOUR CODE
+  await Model.findByIdAndUpdate(
+    String(id),
+    { $set: doc },
+    { upsert: true, new: true }
+  );
+}
 
     if (!collection || !id || !doc) {
       errors.push({ op, error: 'Invalid operation format' });

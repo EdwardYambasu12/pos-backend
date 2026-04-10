@@ -1,10 +1,12 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const https = require('https');
+const { initRealtime } = require('./realtime');
 const authRoutes = require('./routes/auth');
 const syncRoutes = require('./routes/sync');
 const userRoutes = require('./routes/users');
@@ -259,4 +261,6 @@ app.use((err, _req, res, _next) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.BACKEND_PORT || '4000', 10);
-app.listen(PORT, () => console.log(`[Server] Listening on port ${PORT}`));
+const server = http.createServer(app);
+initRealtime(server, corsOptions);
+server.listen(PORT, () => console.log(`[Server] Listening on port ${PORT}`));

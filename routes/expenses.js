@@ -16,6 +16,7 @@ const { v4: uuidv4 } = require('uuid');
 const Expense = require('../models/Expense');
 const AuditLog = require('../models/AuditLog');
 const User = require('../models/User');
+const { emitDataChange } = require('../realtime');
 
 
 async function audit(data) {
@@ -129,6 +130,14 @@ router.post('/', async (req, res) => {
       details: `Added expense "${title}" of ${amount}`,
     });
 
+    emitDataChange({
+      entity: 'expense',
+      action: 'created',
+      ownerAdminId: expense.ownerAdminId || ownerAdminId || null,
+      shopId: expense.shopId || finalShopId || null,
+      userId: userId || null,
+    });
+
     return res.status(201).json(normalize(expense.toObject()));
   } catch (err) {
     console.error('[POST /expenses]', err);
@@ -159,6 +168,15 @@ router.put('/:id', async (req, res) => {
     }
 
     const expense = await Expense.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+
+    emitDataChange({
+      entity: 'expense',
+      action: 'updated',
+      ownerAdminId: expense.ownerAdminId || existingExpense.ownerAdminId || null,
+      shopId: expense.shopId || existingExpense.shopId || null,
+      userId: userId || null,
+    });
+
     return res.json(normalize(expense.toObject()));
   } catch (err) {
     console.error('[PUT /expenses/:id]', err);
@@ -187,6 +205,14 @@ router.delete('/:id', async (req, res) => {
       targetType: 'expense',
       targetId: req.params.id,
       details: `Deleted expense "${expense.title}"`,
+    });
+
+    emitDataChange({
+      entity: 'expense',
+      action: 'deleted',
+      ownerAdminId: expense.ownerAdminId || null,
+      shopId: expense.shopId || null,
+      userId: userId || null,
     });
 
     return res.json({ ok: true });

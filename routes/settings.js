@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { v4: uuidv4 } = require('uuid');
 const Settings = require('../models/Settings');
+const { emitDataChange } = require('../realtime');
 
 router.get('/:key', async (req, res) => {
   try {
@@ -31,6 +32,12 @@ router.put('/:key', async (req, res) => {
         { new: true },
       ).lean();
 
+      emitDataChange({
+        entity: 'settings',
+        action: 'updated',
+        broadcast: true,
+      });
+
       return res.json({ id: String(updated._id), key: updated.key, value: updated.value });
     }
 
@@ -38,6 +45,12 @@ router.put('/:key', async (req, res) => {
       _id: uuidv4(),
       key: req.params.key,
       value,
+    });
+
+    emitDataChange({
+      entity: 'settings',
+      action: 'created',
+      broadcast: true,
     });
 
     return res.status(201).json({ id: String(created._id), key: created.key, value: created.value });

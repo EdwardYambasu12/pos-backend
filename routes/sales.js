@@ -5,6 +5,7 @@ const Sale = require('../models/Sale');
 const Product = require('../models/Product');
 const AuditLog = require('../models/AuditLog');
 const User = require('../models/User');
+const { emitDataChange } = require('../realtime');
 
 
 async function audit(data) {
@@ -141,6 +142,14 @@ router.post('/', async (req, res) => {
       details: `Sale of ${items.length} item(s), total ${totalAmount}`,
     });
 
+    emitDataChange({
+      entity: 'sale',
+      action: 'created',
+      ownerAdminId: sale.ownerAdminId || ownerAdminId || null,
+      shopId: sale.shopId || finalShopId || null,
+      userId: userId || null,
+    });
+
     return res.status(201).json(normalize(sale.toObject()));
   } catch (err) {
     console.error('[POST /sales]', err);
@@ -199,6 +208,14 @@ router.put('/:id', async (req, res) => {
       { new: true },
     ).lean();
 
+    emitDataChange({
+      entity: 'sale',
+      action: 'updated',
+      ownerAdminId: updated.ownerAdminId || existingSale.ownerAdminId || null,
+      shopId: updated.shopId || existingSale.shopId || null,
+      userId: userId || null,
+    });
+
     return res.json(normalize(updated));
   } catch (err) {
     console.error('[PUT /sales/:id]', err);
@@ -238,6 +255,14 @@ router.delete('/:id', async (req, res) => {
       targetType: 'sale',
       targetId: req.params.id,
       details: `Voided sale`,
+    });
+
+    emitDataChange({
+      entity: 'sale',
+      action: 'deleted',
+      ownerAdminId: sale.ownerAdminId || null,
+      shopId: sale.shopId || null,
+      userId: userId || null,
     });
 
     return res.json({ ok: true });

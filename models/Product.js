@@ -15,6 +15,7 @@ const productSchema = new mongoose.Schema(
     shopId: { type: String, default: null },
     ownerAdminId: { type: String, default: null },
     createdAt: { type: String, required: true },
+    
   },
   { _id: false, versionKey: false },
 );

@@ -18,7 +18,12 @@ function normalize({ _id, ...rest }) { return { id: String(_id), ...rest }; }
 
 router.get('/', async (req, res) => {
   try {
-    const shops = await Shop.find().lean();
+    const filter = {};
+    if (req.query.ownerAdminId) {
+      filter.ownerAdminId = req.query.ownerAdminId;
+    }
+
+    const shops = await Shop.find(filter).lean();
     return res.json(shops.map(normalize));
   } catch {
     return res.status(500).json({ error: 'Failed to fetch shops' });

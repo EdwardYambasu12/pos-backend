@@ -46,7 +46,7 @@ async function checkCashierAccess(userId, requestedShopId) {
 
 router.get('/', async (req, res) => {
   try {
-    const { userId } = req.query;
+    const { userId, ownerAdminId } = req.query;
     const access = await checkCashierAccess(userId, req.query.shopId);
     if (!access.allowed) {
       return res.status(403).json({ error: 'Access denied: cashiers can only access their assigned shop' });
@@ -65,6 +65,11 @@ router.get('/', async (req, res) => {
       if (req.query.from) filter.date.$gte = req.query.from;
       if (req.query.to) filter.date.$lte = req.query.to;
     }
+
+    if (ownerAdminId) {
+      filter.ownerAdminId = ownerAdminId;
+    }
+
     const expenses = await Expense.find(filter).sort({ date: -1 }).lean();
     return res.json(expenses.map(normalize));
   } catch {
@@ -90,7 +95,7 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { title, amount, date, shopId, userId } = req.body;
+  const { title, amount, date, shopId, ownerAdminId, userId } = req.body;
   if (!title || amount == null) {
     return res.status(400).json({ error: 'title and amount are required' });
   }
@@ -111,6 +116,7 @@ router.post('/', async (req, res) => {
       amount: Number(amount),
       date: date || new Date().toISOString(),
       shopId: finalShopId,
+      ownerAdminId: ownerAdminId || null,
     });
 
     await audit({

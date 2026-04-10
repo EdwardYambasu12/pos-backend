@@ -16,6 +16,9 @@ const categoryRoutes = require('./routes/categories');
 const auditRoutes = require('./routes/audit');
 const backupRoutes = require('./routes/backup');
 const snapshotRoutes = require('./routes/snapshot');
+const settingsRoutes = require('./routes/settings');
+const subscriptionRoutes = require('./routes/subscription');
+const licenseRoutes = require('./routes/license');
 const DataSnapshot = require('./models/DataSnapshot');
 
 const app = express();
@@ -237,6 +240,9 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/snapshot', snapshotRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/license', licenseRoutes);
 
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));

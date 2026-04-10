@@ -47,13 +47,17 @@ async function checkCashierAccess(userId, requestedShopId) {
 // GET /
 router.get('/', async (req, res) => {
   try {
-    const { userId } = req.query;
+    const { userId, ownerAdminId } = req.query;
     const access = await checkCashierAccess(userId, req.query.shopId);
     if (!access.allowed) {
       return res.status(403).json({ error: 'Access denied: cashiers can only access their assigned shop' });
     }
 
     const filter = req.query.shopId ? { shopId: req.query.shopId } : {};
+
+    if (ownerAdminId) {
+      filter.ownerAdminId = ownerAdminId;
+    }
     
     // If cashier without explicit shopId, auto-restrict
     if (access.restrictedShopId && !req.query.shopId) {

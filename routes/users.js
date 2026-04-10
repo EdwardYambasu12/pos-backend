@@ -37,7 +37,24 @@ async function audit({ action, userId, username, role, targetType, targetId, det
 // GET / — list all users
 router.get('/', async (req, res) => {
   try {
-    const users = await User.find().select('-pin').lean();
+    const filter = {};
+    if (req.query.ownerAdminId) {
+      filter.$or = [
+        { ownerAdminId: req.query.ownerAdminId },
+        { createdBy: req.query.ownerAdminId },
+        { _id: req.query.ownerAdminId, role: 'admin' },
+      ];
+    }
+
+    if (req.query.role) {
+      filter.role = req.query.role;
+    }
+
+    if (req.query.shopId) {
+      filter.shopId = req.query.shopId;
+    }
+
+    const users = await User.find(filter).select('-pin').lean();
     return res.json(users.map(({ _id, ...u }) => ({ id: String(_id), ...u })));
   } catch (err) {
     return res.status(500).json({ error: 'Failed to list users' });

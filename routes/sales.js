@@ -39,7 +39,7 @@ async function checkCashierAccess(userId, requestedShopId) {
 // GET /
 router.get('/', async (req, res) => {
   try {
-    const { userId } = req.query;
+    const { userId, ownerAdminId } = req.query;
     const access = await checkCashierAccess(userId, req.query.shopId);
     if (!access.allowed) {
       return res.status(403).json({ error: 'Access denied: cashiers can only access their assigned shop' });
@@ -58,6 +58,11 @@ router.get('/', async (req, res) => {
       if (req.query.from) filter.date.$gte = req.query.from;
       if (req.query.to) filter.date.$lte = req.query.to;
     }
+
+    if (ownerAdminId) {
+      filter.ownerAdminId = ownerAdminId;
+    }
+
     const sales = await Sale.find(filter).sort({ date: -1 }).lean();
     return res.json(sales.map(normalize));
   } catch {
@@ -86,7 +91,7 @@ router.get('/:id', async (req, res) => {
 
 // POST / — record a sale
 router.post('/', async (req, res) => {
-  const { items, totalAmount, totalProfit, date, shopId, currency, userId } = req.body;
+  const { items, totalAmount, totalProfit, date, shopId, currency, ownerAdminId, userId } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'items array is required and must not be empty' });
@@ -113,6 +118,7 @@ router.post('/', async (req, res) => {
       totalProfit: Number(totalProfit),
       date: date || new Date().toISOString(),
       shopId: finalShopId,
+      ownerAdminId: ownerAdminId || null,
       currency: currency || null,
     });
 
@@ -139,6 +145,64 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('[POST /sales]', err);
     return res.status(500).json({ error: 'Failed to record sale' });
+  }
+});
+
+// PUT /:id — update sale and reconcile stock
+router.put('/:id', async (req, res) => {
+  const { items, totalAmount, totalProfit, userId } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'items array is required and must not be empty' });
+  }
+
+  if (totalAmount == null || totalProfit == null) {
+    return res.status(400).json({ error: 'totalAmount and totalProfit are required' });
+  }
+
+  try {
+    const existingSale = await Sale.findById(req.params.id).lean();
+    if (!existingSale) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+
+    const access = await checkCashierAccess(userId, existingSale.shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only update sales in their assigned shop' });
+    }
+
+    for (const oldItem of existingSale.items || []) {
+      if (oldItem.productId) {
+        await Product.findByIdAndUpdate(oldItem.productId, {
+          $inc: { quantity: Math.abs(oldItem.quantity || 0) },
+        });
+      }
+    }
+
+    for (const newItem of items) {
+      if (newItem.productId) {
+        await Product.findByIdAndUpdate(newItem.productId, {
+          $inc: { quantity: -Math.abs(newItem.quantity || 0) },
+        });
+      }
+    }
+
+    const updated = await Sale.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          items,
+          totalAmount: Number(totalAmount),
+          totalProfit: Number(totalProfit),
+        },
+      },
+      { new: true },
+    ).lean();
+
+    return res.json(normalize(updated));
+  } catch (err) {
+    console.error('[PUT /sales/:id]', err);
+    return res.status(500).json({ error: 'Failed to update sale' });
   }
 });
 

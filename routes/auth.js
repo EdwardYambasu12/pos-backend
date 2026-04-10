@@ -684,4 +684,40 @@ router.get('/me', async (req, res) => {
   }
 });
 
+router.get('/sessions', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+    const filter = {};
+
+    if (req.query.ownerAdminId) {
+      filter.ownerAdminId = req.query.ownerAdminId;
+    }
+
+    const sessions = await Session.find(filter)
+      .sort({ loginTime: -1 })
+      .limit(limit)
+      .lean();
+
+    return res.json(sessions.map(({ _id, ...rest }) => ({ id: String(_id), ...rest })));
+  } catch (err) {
+    console.error('[GET /auth/sessions]', err);
+    return res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+});
+
+router.get('/sessions/:userId', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 200);
+    const sessions = await Session.find({ userId: req.params.userId })
+      .sort({ loginTime: -1 })
+      .limit(limit)
+      .lean();
+
+    return res.json(sessions.map(({ _id, ...rest }) => ({ id: String(_id), ...rest })));
+  } catch (err) {
+    console.error('[GET /auth/sessions/:userId]', err);
+    return res.status(500).json({ error: 'Failed to fetch user sessions' });
+  }
+});
+
 module.exports = router;

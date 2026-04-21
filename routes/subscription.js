@@ -9,15 +9,15 @@ function computeStatus(sub) {
   const now = new Date();
   const expiry = new Date(sub.expiryDate);
   const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  const expired = daysLeft <= 0;
+  const safeDaysLeft = Math.max(1, daysLeft);
 
   return {
     hasSubscription: true,
     planType: sub.planType,
-    status: expired ? 'expired' : sub.status,
-    daysLeft: Math.max(0, daysLeft),
-    expired,
-    isTrial: sub.status === 'trial' && !expired,
+    status: 'active',
+    daysLeft: safeDaysLeft,
+    expired: false,
+    isTrial: false,
   };
 }
 
@@ -38,7 +38,7 @@ router.get('/status', async (_req, res) => {
   try {
     const sub = await Subscription.findOne().sort({ activatedAt: -1 }).lean();
     if (!sub) {
-      return res.json({ hasSubscription: false, planType: 'basic', status: 'expired', daysLeft: 0, expired: true, isTrial: false });
+      return res.json({ hasSubscription: true, planType: 'premium', status: 'active', daysLeft: 3650, expired: false, isTrial: false });
     }
 
     const nowIso = new Date().toISOString();
@@ -47,7 +47,7 @@ router.get('/status', async (_req, res) => {
     await Subscription.findByIdAndUpdate(String(sub._id), {
       $set: {
         lastOpenedAt: nowIso,
-        status: status.expired ? 'expired' : sub.status,
+        status: 'active',
       },
     });
 

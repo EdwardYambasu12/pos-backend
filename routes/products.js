@@ -19,6 +19,11 @@ const User = require('../models/User');
 const { emitDataChange } = require('../realtime');
 
 
+function isAtlasQuotaError(err) {
+  return Boolean(err && (err.code === 8000 || err.codeName === 'AtlasError'));
+}
+
+
 async function audit(data) {
   try {
     await AuditLog.create({ _id: uuidv4(), ...data, timestamp: new Date().toISOString() });
@@ -140,6 +145,11 @@ router.post('/', async (req, res) => {
     return res.status(201).json(normalize(product.toObject()));
   } catch (err) {
     console.error('[POST /products]', err);
+    if (isAtlasQuotaError(err)) {
+      return res.status(507).json({
+        error: 'Storage quota reached. Free MongoDB space or upgrade your Atlas cluster.',
+      });
+    }
     return res.status(500).json({ error: 'Failed to create product' });
   }
 });
@@ -194,6 +204,11 @@ router.put('/:id', async (req, res) => {
     return res.json(normalize(product.toObject()));
   } catch (err) {
     console.error('[PUT /products/:id]', err);
+    if (isAtlasQuotaError(err)) {
+      return res.status(507).json({
+        error: 'Storage quota reached. Free MongoDB space or upgrade your Atlas cluster.',
+      });
+    }
     return res.status(500).json({ error: 'Failed to update product' });
   }
 });

@@ -16,12 +16,9 @@ const expenseRoutes = require('./routes/expenses');
 const shopRoutes = require('./routes/shops');
 const categoryRoutes = require('./routes/categories');
 const auditRoutes = require('./routes/audit');
-const backupRoutes = require('./routes/backup');
-const snapshotRoutes = require('./routes/snapshot');
 const settingsRoutes = require('./routes/settings');
 const subscriptionRoutes = require('./routes/subscription');
 const licenseRoutes = require('./routes/license');
-const DataSnapshot = require('./models/DataSnapshot');
 
 const app = express();
 
@@ -156,6 +153,11 @@ function buildMongoConnectionUri(baseUri, dbName) {
 
 const MONGODB_CONNECTION_URI = buildMongoConnectionUri(MONGODB_URI, MONGODB_DB);
 
+function parsePositiveInt(value, fallback) {
+  const parsed = parseInt(String(value || ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 mongoose
   .connect(MONGODB_CONNECTION_URI)
   .then(() => console.log(`[DB] Connected to MongoDB — ${MONGODB_DB}`))
@@ -163,72 +165,6 @@ mongoose
     console.error('[DB] Connection failed:', err.message);
     process.exit(1);
   });
-
-const SNAPSHOT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-
-async function createDataSnapshot() {
-  try {
-    const [
-      users,
-      shops,
-      products,
-      sales,
-      expenses,
-      categories,
-      auditLogs,
-      sessions,
-      settings,
-      licenses,
-      subscriptions,
-      backups,
-    ] = await Promise.all([
-      require('./models/User').find().lean(),
-      require('./models/Shop').find().lean(),
-      require('./models/Product').find().lean(),
-      require('./models/Sale').find().lean(),
-      require('./models/Expense').find().lean(),
-      require('./models/Category').find().lean(),
-      require('./models/AuditLog').find().lean(),
-      require('./models/Session').find().lean(),
-      require('./models/Settings').find().lean(),
-      require('./models/License').find().lean(),
-      require('./models/Subscription').find().lean(),
-      require('./models/Backup').find().lean(),
-    ]);
-
-    const snapshot = new DataSnapshot({
-      _id: `snapshot_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      version: process.env.APP_VERSION || '1.0.0',
-      data: {
-        users,
-        shops,
-        products,
-        sales,
-        expenses,
-        categories,
-        auditLogs,
-        sessions,
-        settings,
-        licenses,
-        subscriptions,
-        backups,
-      },
-    });
-
-    await snapshot.save();
-    console.log(`[Snapshot] Created data snapshot ${snapshot._id} with ${
-      users.length + shops.length + products.length + sales.length + expenses.length + categories.length + auditLogs.length + sessions.length + settings.length + licenses.length + subscriptions.length + backups.length
-    } records.`);
-  } catch (err) {
-    console.error('[Snapshot] Failed to create data snapshot:', err.message);
-  }
-}
-
-setTimeout(() => {
-  createDataSnapshot();
-  setInterval(createDataSnapshot, SNAPSHOT_INTERVAL_MS);
-}, SNAPSHOT_INTERVAL_MS);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -240,8 +176,6 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/audit', auditRoutes);
-app.use('/api/backup', backupRoutes);
-app.use('/api/snapshot', snapshotRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/license', licenseRoutes);

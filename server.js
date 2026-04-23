@@ -59,7 +59,7 @@ app.get('/ping', (req, res) => {
 });
 
 const KEEP_ALIVE_URL = 'https://pos-backend-1-fa4t.onrender.com/ping';
-const KEEP_ALIVE_INTERVAL = 600 * 1000; // 10 minutes
+const KEEP_ALIVE_INTERVAL = 10 * 60 * 1000; // 10 minutes
 
 let keepAliveCount = 0;
 let lastKeepAliveSuccess = null;

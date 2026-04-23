@@ -86,7 +86,7 @@ setTimeout(() => {
   console.log('Starting keep-alive system...');
   keepAlive();
   setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
-}, 30000);
+}, 600000);
 
 
 // General rate limit – tighten for auth routes specifically (see auth.js)

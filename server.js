@@ -59,7 +59,7 @@ app.get('/ping', (req, res) => {
 });
 
 const KEEP_ALIVE_URL = 'https://pos-backend-g64z.onrender.com/ping';
-const KEEP_ALIVE_INTERVAL = 60 * 1000; // 1 minute
+const KEEP_ALIVE_INTERVAL = 600 * 1000; // 10 minutes
 
 let keepAliveCount = 0;
 let lastKeepAliveSuccess = null;
@@ -86,7 +86,7 @@ setTimeout(() => {
   console.log('Starting keep-alive system...');
   keepAlive();
   setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
-}, 600000);
+}, 30000);
 
 
 // General rate limit – tighten for auth routes specifically (see auth.js)

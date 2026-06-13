@@ -5,25 +5,35 @@ const Subscription = require('../models/Subscription');
 const TRIAL_DAYS = 7;
 const SUBSCRIPTION_DAYS = 30;
 
+// Helper to get ownerAdminId from request (query param or body)
+function getOwnerAdminId(req) {
+  return req.body?.ownerAdminId || req.query?.ownerAdminId;
+}
+
 function computeStatus(sub) {
   const now = new Date();
   const expiry = new Date(sub.expiryDate);
   const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  const safeDaysLeft = Math.max(1, daysLeft);
+  const expired = daysLeft <= 0;
 
   return {
     hasSubscription: true,
     planType: sub.planType,
-    status: 'active',
-    daysLeft: safeDaysLeft,
-    expired: false,
-    isTrial: false,
+    status: expired ? 'expired' : sub.status,
+    daysLeft: expired ? 0 : daysLeft,
+    expired,
+    isTrial: !expired && sub.status === 'trial',
   };
 }
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const sub = await Subscription.findOne().sort({ activatedAt: -1 }).lean();
+    const ownerAdminId = getOwnerAdminId(req);
+    if (!ownerAdminId) {
+      return res.status(400).json({ error: 'ownerAdminId is required' });
+    }
+
+    const sub = await Subscription.findOne({ ownerAdminId }).sort({ activatedAt: -1 }).lean();
     if (!sub) {
       return res.json(null);
     }
@@ -34,11 +44,16 @@ router.get('/', async (_req, res) => {
   }
 });
 
-router.get('/status', async (_req, res) => {
+router.get('/status', async (req, res) => {
   try {
-    const sub = await Subscription.findOne().sort({ activatedAt: -1 }).lean();
+    const ownerAdminId = getOwnerAdminId(req);
+    if (!ownerAdminId) {
+      return res.status(400).json({ error: 'ownerAdminId is required' });
+    }
+
+    const sub = await Subscription.findOne({ ownerAdminId }).sort({ activatedAt: -1 }).lean();
     if (!sub) {
-      return res.json({ hasSubscription: true, planType: 'premium', status: 'active', daysLeft: 3650, expired: false, isTrial: false });
+      return res.json({ hasSubscription: false, planType: 'basic', status: 'expired', daysLeft: 0, expired: true, isTrial: false });
     }
 
     const nowIso = new Date().toISOString();
@@ -47,7 +62,7 @@ router.get('/status', async (_req, res) => {
     await Subscription.findByIdAndUpdate(String(sub._id), {
       $set: {
         lastOpenedAt: nowIso,
-        status: 'active',
+        status: status.status,
       },
     });
 
@@ -58,9 +73,9 @@ router.get('/status', async (_req, res) => {
 });
 
 router.post('/trial', async (req, res) => {
-  const { planType } = req.body;
-  if (!planType) {
-    return res.status(400).json({ error: 'planType is required' });
+  const { planType, ownerAdminId } = req.body;
+  if (!planType || !ownerAdminId) {
+    return res.status(400).json({ error: 'planType and ownerAdminId are required' });
   }
 
   try {
@@ -68,10 +83,12 @@ router.post('/trial', async (req, res) => {
     const expiry = new Date(now);
     expiry.setDate(expiry.getDate() + TRIAL_DAYS);
 
-    await Subscription.deleteMany({});
+    // Delete existing subscription for this admin
+    await Subscription.deleteMany({ ownerAdminId });
 
     const created = await Subscription.create({
       _id: uuidv4(),
+      ownerAdminId,
       planType,
       status: 'trial',
       expiryDate: expiry.toISOString(),
@@ -87,10 +104,14 @@ router.post('/trial', async (req, res) => {
 });
 
 router.post('/activate', async (req, res) => {
-  const { planType } = req.body;
+  const { planType, ownerAdminId } = req.body;
+  
+  if (!ownerAdminId) {
+    return res.status(400).json({ error: 'ownerAdminId is required' });
+  }
 
   try {
-    const current = await Subscription.findOne().sort({ activatedAt: -1 }).lean();
+    const current = await Subscription.findOne({ ownerAdminId }).sort({ activatedAt: -1 }).lean();
     const now = new Date();
     const expiry = new Date(now);
     expiry.setDate(expiry.getDate() + SUBSCRIPTION_DAYS);
@@ -115,6 +136,7 @@ router.post('/activate', async (req, res) => {
 
     const created = await Subscription.create({
       _id: uuidv4(),
+      ownerAdminId,
       planType: planType || 'basic',
       status: 'active',
       expiryDate: expiry.toISOString(),
@@ -129,15 +151,29 @@ router.post('/activate', async (req, res) => {
 });
 
 router.put('/plan', async (req, res) => {
-  const { planType } = req.body;
-  if (!planType) {
-    return res.status(400).json({ error: 'planType is required' });
+  const { planType, ownerAdminId } = req.body;
+  if (!planType || !ownerAdminId) {
+    return res.status(400).json({ error: 'planType and ownerAdminId are required' });
   }
 
   try {
-    const current = await Subscription.findOne().sort({ activatedAt: -1 }).lean();
+    const current = await Subscription.findOne({ ownerAdminId }).sort({ activatedAt: -1 }).lean();
     if (!current) {
-      return res.status(404).json({ error: 'Subscription not found' });
+      const now = new Date();
+      const expiry = new Date(now);
+      expiry.setDate(expiry.getDate() + SUBSCRIPTION_DAYS);
+
+      const created = await Subscription.create({
+        _id: uuidv4(),
+        ownerAdminId,
+        planType,
+        status: 'active',
+        expiryDate: expiry.toISOString(),
+        activatedAt: now.toISOString(),
+        lastOpenedAt: now.toISOString(),
+      });
+
+      return res.status(201).json({ id: String(created._id), ...created.toObject(), _id: undefined });
     }
 
     const updated = await Subscription.findByIdAndUpdate(

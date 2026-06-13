@@ -19,6 +19,7 @@ const auditRoutes = require('./routes/audit');
 const settingsRoutes = require('./routes/settings');
 const subscriptionRoutes = require('./routes/subscription');
 const licenseRoutes = require('./routes/license');
+const chatRoutes = require('./routes/chat');
 
 const app = express();
 
@@ -31,6 +32,7 @@ function normalizeOrigin(value) {
 
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'https://swiftpos-iota.vercel.app')
   .split(',')
+  .concat(['http://localhost:8090'])
   .map((o) => normalizeOrigin(o))
   .filter(Boolean);
 
@@ -179,6 +181,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/license', licenseRoutes);
+app.use('/api/chat', chatRoutes);
 
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));

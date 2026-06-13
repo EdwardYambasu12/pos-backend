@@ -32,6 +32,12 @@ async function audit(data) {
 
 function normalize({ _id, ...rest }) { return { id: String(_id), ...rest }; }
 
+function normalizeBarcode(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized || null;
+}
+
 /**
  * Helper: If userId is provided and user is cashier, verify they can access the requested shopId
  */
@@ -110,11 +116,20 @@ router.post('/', async (req, res) => {
     }
 
     const finalShopId = shopId || access.restrictedShopId || null;
+    const barcode = normalizeBarcode(rest.barcode);
+
+    if (barcode) {
+      const existing = await Product.findOne({ shopId: finalShopId, barcode }).lean();
+      if (existing) {
+        return res.status(409).json({ error: 'A product with this barcode already exists in this shop' });
+      }
+    }
 
     const id = uuidv4();
     const product = await Product.create({
       _id: id,
       name: name.trim(),
+      barcode,
       costPrice: Number(costPrice),
       sellingPrice: Number(sellingPrice),
       quantity: Number(quantity),
@@ -122,6 +137,7 @@ router.post('/', async (req, res) => {
       ownerAdminId: ownerAdminId || null,
       createdAt: new Date().toISOString(),
       ...rest,
+      barcode,
     });
 
     await audit({
@@ -157,7 +173,7 @@ router.post('/', async (req, res) => {
 // PUT /:id
 router.put('/:id', async (req, res) => {
   const allowed = ['name', 'costPrice', 'sellingPrice', 'discountPrice', 'quantity',
-    'category', 'categoryId', 'expiryDate', 'currency', 'shopId'];
+    'category', 'categoryId', 'expiryDate', 'currency', 'shopId', 'imageUrl', 'barcode'];
   const updates = {};
   allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
@@ -176,6 +192,22 @@ router.put('/:id', async (req, res) => {
     const access = await checkCashierAccess(userId, shopIdToCheck);
     if (!access.allowed) {
       return res.status(403).json({ error: 'Access denied: cashiers can only update products in their assigned shop' });
+    }
+
+    if (updates.barcode !== undefined) {
+      updates.barcode = normalizeBarcode(updates.barcode);
+    }
+
+    if (updates.barcode) {
+      const duplicate = await Product.findOne({
+        _id: { $ne: req.params.id },
+        shopId: shopIdToCheck || null,
+        barcode: updates.barcode,
+      }).lean();
+
+      if (duplicate) {
+        return res.status(409).json({ error: 'A product with this barcode already exists in this shop' });
+      }
     }
 
     const product = await Product.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });

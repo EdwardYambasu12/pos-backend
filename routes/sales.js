@@ -202,7 +202,7 @@ router.post('/', async (req, res) => {
     }
 
     const actor = userId ? await User.findById(String(userId)).lean() : null;
-    const actorUsername = actor?.username || username || 'offline-sync';
+    const actorUsername = actor?.displayName || actor?.username || username || 'offline-sync';
     const actorRole = actor?.role || role || 'manager';
     const effectiveOwnerAdminId = ownerAdminId
       || (actor
@@ -252,6 +252,9 @@ router.post('/', async (req, res) => {
         profit: Number(totalProfit),
         payments: paymentValidation.payments,
         changeDue: paymentValidation.changeDue,
+        cashierId: userId || null,
+        cashierName: actorUsername,
+        cashierRole: actorRole,
       },
     });
 

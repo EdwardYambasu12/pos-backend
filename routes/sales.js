@@ -30,7 +30,8 @@ async function audit(data) {
 
 function normalize({ _id, ...rest }) { return { id: String(_id), ...rest }; }
 
-const ALLOWED_PAYMENT_METHODS = new Set(['cash', 'card', 'mobile_money']);
+const ALLOWED_PAYMENT_METHODS = new Set(['cash', 'card', 'mobile_money', 'credit']);
+const ALLOWED_CREDIT_REPAYMENT_METHODS = new Set(['cash', 'card', 'mobile_money']);
 
 function validatePayments(payments, totalAmount, requestedChangeDue) {
   if (!Array.isArray(payments) || payments.length === 0) {
@@ -38,6 +39,8 @@ function validatePayments(payments, totalAmount, requestedChangeDue) {
   }
 
   let paidTotal = 0;
+  let nonCreditPaidTotal = 0;
+  let creditTotal = 0;
   for (const payment of payments) {
     if (!payment || !ALLOWED_PAYMENT_METHODS.has(payment.method)) {
       return { ok: false, error: 'Invalid payment method provided' };
@@ -47,13 +50,19 @@ function validatePayments(payments, totalAmount, requestedChangeDue) {
       return { ok: false, error: 'Payment amount must be a non-negative number' };
     }
     paidTotal += amount;
+    if (payment.method === 'credit') {
+      creditTotal += amount;
+    } else {
+      nonCreditPaidTotal += amount;
+    }
   }
 
   if (paidTotal + 0.001 < totalAmount) {
     return { ok: false, error: 'Total paid amount cannot be less than sale total' };
   }
 
-  const computedChangeDue = Math.max(0, Number((paidTotal - totalAmount).toFixed(2)));
+  const amountToCollectNow = Math.max(0, Number((totalAmount - creditTotal).toFixed(2)));
+  const computedChangeDue = Math.max(0, Number((nonCreditPaidTotal - amountToCollectNow).toFixed(2)));
   if (requestedChangeDue != null) {
     const normalizedRequested = Number(requestedChangeDue);
     if (!Number.isFinite(normalizedRequested) || Math.abs(normalizedRequested - computedChangeDue) > 0.01) {
@@ -65,6 +74,7 @@ function validatePayments(payments, totalAmount, requestedChangeDue) {
     ok: true,
     payments: payments.map((payment) => ({ method: payment.method, amount: Number(payment.amount) })),
     changeDue: computedChangeDue,
+    creditAmount: Number(creditTotal.toFixed(2)),
   };
 }
 
@@ -132,6 +142,36 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /credit — list credit sales with outstanding balances
+router.get('/credit/list', async (req, res) => {
+  try {
+    const { userId, ownerAdminId } = req.query;
+    const access = await checkCashierAccess(userId, req.query.shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only access their assigned shop' });
+    }
+
+    const filter = { isCreditSale: true };
+    if (req.query.shopId) {
+      filter.shopId = req.query.shopId;
+    } else if (access.restrictedShopId) {
+      filter.shopId = access.restrictedShopId;
+    }
+    if (ownerAdminId) {
+      filter.ownerAdminId = ownerAdminId;
+    }
+    if (String(req.query.includeSettled || 'false') !== 'true') {
+      filter.creditAmount = { $gt: 0 };
+    }
+
+    const sales = await Sale.find(filter).sort({ date: -1 }).lean();
+    return res.json(sales.map(normalize));
+  } catch (err) {
+    console.error('[GET /sales/credit/list]', err);
+    return res.status(500).json({ error: 'Failed to fetch credit sales' });
+  }
+});
+
 // GET /:id
 router.get('/:id', async (req, res) => {
   try {
@@ -151,6 +191,107 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// POST /:id/credit-payments — record repayment for a credit sale
+router.post('/:id/credit-payments', async (req, res) => {
+  try {
+    const {
+      amount,
+      method,
+      note,
+      userId,
+      username,
+      role,
+    } = req.body;
+
+    const normalizedAmount = Number(amount);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return res.status(400).json({ error: 'amount must be greater than 0' });
+    }
+    if (!ALLOWED_CREDIT_REPAYMENT_METHODS.has(String(method || ''))) {
+      return res.status(400).json({ error: 'Invalid repayment method' });
+    }
+
+    const sale = await Sale.findById(req.params.id).lean();
+    if (!sale) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+    if (!sale.isCreditSale) {
+      return res.status(400).json({ error: 'This sale is not a credit sale' });
+    }
+
+    const access = await checkCashierAccess(userId, sale.shopId);
+    if (!access.allowed) {
+      return res.status(403).json({ error: 'Access denied: cashiers can only update sales in their assigned shop' });
+    }
+
+    const currentOutstanding = Number(sale.creditAmount || 0);
+    if (currentOutstanding <= 0) {
+      return res.status(400).json({ error: 'This credit sale is already fully paid' });
+    }
+    if (normalizedAmount - currentOutstanding > 0.01) {
+      return res.status(400).json({ error: `Repayment cannot exceed outstanding balance (${currentOutstanding.toFixed(2)})` });
+    }
+
+    const actor = userId ? await User.findById(String(userId)).lean() : null;
+    const actorUsername = actor?.displayName || actor?.username || username || 'system';
+    const actorRole = actor?.role || role || 'manager';
+
+    const nextOutstanding = Number(Math.max(0, currentOutstanding - normalizedAmount).toFixed(2));
+    const paymentDate = new Date().toISOString();
+    const paymentEntry = {
+      amount: normalizedAmount,
+      method: String(method),
+      date: paymentDate,
+      note: String(note || '').trim() || null,
+      receivedByUserId: userId ? String(userId) : null,
+      receivedByUsername: actorUsername,
+    };
+
+    const updated = await Sale.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          creditAmount: nextOutstanding,
+        },
+        $push: {
+          creditPayments: paymentEntry,
+          payments: { method: String(method), amount: normalizedAmount },
+        },
+      },
+      { new: true },
+    ).lean();
+
+    await audit({
+      action: 'sale_updated',
+      userId: userId || 'system',
+      username: actorUsername,
+      role: actorRole,
+      targetType: 'sale',
+      targetId: req.params.id,
+      details: `Credit repayment recorded (${normalizedAmount.toFixed(2)})`,
+      metadata: {
+        creditPayment: normalizedAmount,
+        repaymentMethod: method,
+        outstandingBefore: currentOutstanding,
+        outstandingAfter: nextOutstanding,
+      },
+    });
+
+    emitDataChange({
+      entity: 'sale',
+      action: 'updated',
+      ownerAdminId: updated.ownerAdminId || sale.ownerAdminId || null,
+      shopId: updated.shopId || sale.shopId || null,
+      userId: userId || null,
+    });
+
+    return res.json(normalize(updated));
+  } catch (err) {
+    console.error('[POST /sales/:id/credit-payments]', err);
+    return res.status(500).json({ error: 'Failed to record credit repayment' });
+  }
+});
+
 // POST / — record a sale
 router.post('/', async (req, res) => {
   const {
@@ -162,6 +303,11 @@ router.post('/', async (req, res) => {
     date,
     shopId,
     currency,
+    isCreditSale,
+    creditCustomerName,
+    creditCustomerPhone,
+    creditDueDate,
+    creditNotes,
     ownerAdminId,
     userId,
     username,
@@ -184,6 +330,13 @@ router.post('/', async (req, res) => {
   const paymentValidation = validatePayments(payments, normalizedTotalAmount, changeDue);
   if (!paymentValidation.ok) {
     return res.status(400).json({ error: paymentValidation.error });
+  }
+
+  const normalizedCreditCustomerName = String(creditCustomerName || '').trim();
+  const hasCreditPayment = paymentValidation.creditAmount > 0;
+  const isCreditSaleResolved = Boolean(isCreditSale) || hasCreditPayment;
+  if (isCreditSaleResolved && !normalizedCreditCustomerName) {
+    return res.status(400).json({ error: 'creditCustomerName is required for credit sales' });
   }
 
   // Idempotency check — return existing sale without re-inserting
@@ -225,6 +378,12 @@ router.post('/', async (req, res) => {
       shopId: finalShopId,
       ownerAdminId: effectiveOwnerAdminId,
       currency: currency || null,
+      isCreditSale: isCreditSaleResolved,
+      creditAmount: paymentValidation.creditAmount,
+      creditCustomerName: isCreditSaleResolved ? normalizedCreditCustomerName : null,
+      creditCustomerPhone: isCreditSaleResolved ? String(creditCustomerPhone || '').trim() || null : null,
+      creditDueDate: isCreditSaleResolved ? String(creditDueDate || '').trim() || null : null,
+      creditNotes: isCreditSaleResolved ? String(creditNotes || '').trim() || null : null,
       idempotencyKey: idempotencyKey || null,
     });
 
@@ -252,6 +411,10 @@ router.post('/', async (req, res) => {
         profit: Number(totalProfit),
         payments: paymentValidation.payments,
         changeDue: paymentValidation.changeDue,
+        isCreditSale: isCreditSaleResolved,
+        creditAmount: paymentValidation.creditAmount,
+        creditCustomerName: isCreditSaleResolved ? normalizedCreditCustomerName : null,
+        creditDueDate: isCreditSaleResolved ? String(creditDueDate || '').trim() || null : null,
         cashierId: userId || null,
         cashierName: actorUsername,
         cashierRole: actorRole,
@@ -275,7 +438,19 @@ router.post('/', async (req, res) => {
 
 // PUT /:id — update sale and reconcile stock
 router.put('/:id', async (req, res) => {
-  const { items, payments, changeDue, totalAmount, totalProfit, userId } = req.body;
+  const {
+    items,
+    payments,
+    changeDue,
+    totalAmount,
+    totalProfit,
+    userId,
+    isCreditSale,
+    creditCustomerName,
+    creditCustomerPhone,
+    creditDueDate,
+    creditNotes,
+  } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'items array is required and must not be empty' });
@@ -305,6 +480,13 @@ router.put('/:id', async (req, res) => {
     const paymentValidation = validatePayments(effectivePayments, normalizedTotalAmount, changeDue);
     if (!paymentValidation.ok) {
       return res.status(400).json({ error: paymentValidation.error });
+    }
+
+    const hasCreditPayment = paymentValidation.creditAmount > 0;
+    const normalizedCreditCustomerName = String(creditCustomerName || existingSale.creditCustomerName || '').trim();
+    const isCreditSaleResolved = Boolean(isCreditSale) || hasCreditPayment;
+    if (isCreditSaleResolved && !normalizedCreditCustomerName) {
+      return res.status(400).json({ error: 'creditCustomerName is required for credit sales' });
     }
 
     const access = await checkCashierAccess(userId, existingSale.shopId);
@@ -337,6 +519,18 @@ router.put('/:id', async (req, res) => {
           changeDue: paymentValidation.changeDue,
           totalAmount: normalizedTotalAmount,
           totalProfit: Number(totalProfit),
+          isCreditSale: isCreditSaleResolved,
+          creditAmount: paymentValidation.creditAmount,
+          creditCustomerName: isCreditSaleResolved ? normalizedCreditCustomerName : null,
+          creditCustomerPhone: isCreditSaleResolved
+            ? String(creditCustomerPhone || existingSale.creditCustomerPhone || '').trim() || null
+            : null,
+          creditDueDate: isCreditSaleResolved
+            ? String(creditDueDate || existingSale.creditDueDate || '').trim() || null
+            : null,
+          creditNotes: isCreditSaleResolved
+            ? String(creditNotes || existingSale.creditNotes || '').trim() || null
+            : null,
         },
       },
       { new: true },

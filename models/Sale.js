@@ -17,8 +17,20 @@ const saleItemSchema = new mongoose.Schema(
 
 const salePaymentSchema = new mongoose.Schema(
   {
-    method: { type: String, enum: ['cash', 'card', 'mobile_money'], required: true },
+    method: { type: String, enum: ['cash', 'card', 'mobile_money', 'credit'], required: true },
     amount: { type: Number, required: true, min: 0 },
+  },
+  { _id: false },
+);
+
+const creditPaymentSchema = new mongoose.Schema(
+  {
+    amount: { type: Number, required: true, min: 0 },
+    method: { type: String, enum: ['cash', 'card', 'mobile_money'], required: true },
+    date: { type: String, required: true },
+    note: { type: String, default: null },
+    receivedByUserId: { type: String, default: null },
+    receivedByUsername: { type: String, default: null },
   },
   { _id: false },
 );
@@ -35,6 +47,13 @@ const saleSchema = new mongoose.Schema(
     shopId: { type: String, default: null },
     ownerAdminId: { type: String, default: null },
     currency: { type: String, default: null },
+    isCreditSale: { type: Boolean, default: false },
+    creditAmount: { type: Number, default: 0 },
+    creditCustomerName: { type: String, default: null },
+    creditCustomerPhone: { type: String, default: null },
+    creditDueDate: { type: String, default: null },
+    creditNotes: { type: String, default: null },
+    creditPayments: { type: [creditPaymentSchema], default: [] },
     idempotencyKey: { type: String, default: null },
   },
   { _id: false, versionKey: false },
